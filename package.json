@@ -1,0 +1,27 @@
+{
+  "name": "drive-clone",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.12.0 <25"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "contracts:generate": "node packages/contracts/scripts/generate.ts",
+    "contracts:check": "node packages/contracts/scripts/generate.ts --check",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run contracts:check && npm test"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vitest": "5.1.0",
+    "@types/node": "24.19.2",
+    "@apidevtools/swagger-parser": "13.1.0",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1"
+  }
+}

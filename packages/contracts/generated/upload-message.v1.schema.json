@@ -1,0 +1,1 @@
+{"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"type":"object","required":["version","type","id"],"properties":{"version":{"const":1,"type":"number"},"type":{"const":"UPLOAD","type":"string"},"id":{"format":"uuid","type":"string"}}}
