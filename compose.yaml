@@ -1,0 +1,109 @@
+name: drive-clone-dev
+services:
+  postgres:
+    image: postgres:17.7-bookworm@sha256:86e0b703649d7a792bd9243ee28afc9d8f7c6b2b5638077c9d6882d4d472bbfd
+    environment:
+      POSTGRES_DB: drive
+      POSTGRES_USER: drive
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Configurar POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U drive -d drive']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  localstack:
+    image: localstack/localstack-pro:2026.3.0@sha256:4a8632f0de3888e594ff8f2d9c6e8371309ccf19469c317a9b5a074b6334c31c
+    environment:
+      SERVICES: s3,sqs
+      PERSISTENCE: '1'
+      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:?Configurar LOCALSTACK_AUTH_TOKEN}
+    volumes:
+      - localstack_data:/var/lib/localstack
+    networks: [internal]
+    healthcheck:
+      test: [CMD, curl, -fsS, 'http://localhost:4566/_localstack/health']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  temp-init:
+    build: { context: ., dockerfile: infra/server.Dockerfile }
+    user: root
+    command: [sh, -c, 'mkdir -p /app/temp && chown 1000:1000 /app/temp']
+    volumes: [temp_data:/app/temp]
+    networks: [internal]
+
+  migrate:
+    build: { context: ., dockerfile: infra/server.Dockerfile }
+    command: [npm, run, migrate, -w, '@drive-clone/server']
+    environment: &server_env
+      DATABASE_URL: postgres://drive:${POSTGRES_PASSWORD:?Configurar POSTGRES_PASSWORD}@postgres:5432/drive
+      AWS_ENDPOINT: http://localstack:4566
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      S3_BUCKET: drive-files
+      SQS_QUEUE: drive-uploads
+      SQS_DLQ: drive-uploads-dlq
+      TEMP_DIR: /app/temp
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [internal]
+
+  bootstrap:
+    build: { context: ., dockerfile: infra/server.Dockerfile }
+    command: [npm, run, bootstrap, -w, '@drive-clone/server']
+    environment: *server_env
+    depends_on:
+      localstack: { condition: service_healthy }
+    networks: [internal]
+
+  api:
+    build: { context: ., dockerfile: infra/server.Dockerfile }
+    command: [npm, run, dev, -w, '@drive-clone/server']
+    environment: *server_env
+    volumes: [temp_data:/app/temp]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      bootstrap: { condition: service_completed_successfully }
+      temp-init: { condition: service_completed_successfully }
+    networks: [internal]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://localhost:3000/api/v1/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  worker:
+    build: { context: ., dockerfile: infra/server.Dockerfile }
+    command: [npm, run, worker, -w, '@drive-clone/server']
+    environment: *server_env
+    volumes: [temp_data:/app/temp]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      bootstrap: { condition: service_completed_successfully }
+      temp-init: { condition: service_completed_successfully }
+    networks: [internal]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://localhost:3001/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  web:
+    build: { context: ., dockerfile: infra/web.Dockerfile }
+    ports: ['127.0.0.1:8080:8080']
+    depends_on:
+      api: { condition: service_healthy }
+    networks: [internal]
+
+networks:
+  internal: {}
+volumes:
+  postgres_data: {}
+  localstack_data: {}
+  temp_data: {}

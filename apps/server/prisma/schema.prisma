@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+datasource db {
+  provider = "postgresql"
+}
+model User {
+  id            String     @id @default(uuid()) @db.Uuid
+  username      String     @unique @db.VarChar(32)
+  passwordHash  String
+  reservedBytes BigInt     @default(0)
+  usedBytes     BigInt     @default(0)
+  createdAt     DateTime   @default(now()) @db.Timestamptz(6)
+  resources     Resource[]
+  uploads       Upload[]
+  shares        Share[]
+  sessions      Session[]
+  deletions     Deletion[] @relation("deletionOwner")
+  requests      Deletion[] @relation("deletionRequester")
+}
+model Session {
+  id         String   @id
+  userId     String?  @db.Uuid
+  data       Json
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  lastSeenAt DateTime @default(now()) @db.Timestamptz(6)
+  expiresAt  DateTime @db.Timestamptz(6)
+  user       User?    @relation(fields: [userId], references: [id])
+  @@index([expiresAt])
+  @@index([userId])
+}
+
+model Resource {
+  id         String     @id @default(uuid()) @db.Uuid
+  ownerId    String     @db.Uuid
+  parentId   String?    @db.Uuid
+  kind       String
+  name       String     @db.VarChar(120)
+  nameKey    String
+  isRoot     Boolean    @default(false)
+  status     String
+  size       BigInt?
+  mimeType   String?
+  sha256     String?    @db.Char(64)
+  objectKey  String?    @unique
+  deletionId String?    @db.Uuid
+  createdAt  DateTime   @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime   @updatedAt @db.Timestamptz(6)
+  owner      User       @relation(fields: [ownerId], references: [id])
+  parent     Resource?  @relation("tree", fields: [parentId, ownerId], references: [id, ownerId])
+  children   Resource[] @relation("tree")
+  shares     Share[]
+  uploadRef  Upload?    @relation("uploadRef")
+  deletion   Deletion?  @relation(fields: [deletionId], references: [id])
+  @@unique([id, ownerId])
+  @@unique([parentId, nameKey])
+  @@index([parentId, createdAt, id])
+  @@index([ownerId, status])
+  @@index([deletionId])
+}
+
+model Share {
+  resourceId String   @db.Uuid
+  userId     String   @db.Uuid
+  permission String
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+  resource   Resource @relation(fields: [resourceId], references: [id])
+  user       User     @relation(fields: [userId], references: [id])
+  @@id([resourceId, userId])
+  @@index([userId, createdAt, resourceId])
+}
+
+model Upload {
+  id                String          @id @default(uuid()) @db.Uuid
+  userId            String          @db.Uuid
+  resourceId        String          @unique @db.Uuid
+  resourceRefId     String?         @unique @db.Uuid
+  status            String
+  expectedSize      BigInt
+  receivedBytes     BigInt          @default(0)
+  tempKey           String?
+  sha256            String?         @db.Char(64)
+  attemptId         String?         @db.Uuid
+  attemptCount      Int             @default(0)
+  leaseUntil        DateTime?        @db.Timestamptz(6)
+  nextAttemptAt     DateTime?        @db.Timestamptz(6)
+  cancelRequestedAt DateTime?        @db.Timestamptz(6)
+  errorCode         String?
+  cleanupPending    Boolean         @default(false)
+  createdAt         DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime        @updatedAt @db.Timestamptz(6)
+  user              User            @relation(fields: [userId], references: [id])
+  resourceRef       Resource?       @relation("uploadRef", fields: [resourceRefId], references: [id], onDelete: SetNull)
+  attempts          UploadAttempt[]
+  @@index([userId, status, createdAt, id])
+  @@index([status, leaseUntil])
+  @@index([status, nextAttemptAt])
+}
+
+model UploadAttempt {
+  id        String   @id @default(uuid()) @db.Uuid
+  uploadId  String   @db.Uuid
+  objectKey String   @unique
+  status    String
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  upload    Upload   @relation(fields: [uploadId], references: [id])
+}
+
+model Deletion {
+  id                 String     @id @default(uuid()) @db.Uuid
+  resourceId         String     @db.Uuid
+  ownerId            String     @db.Uuid
+  requestedById      String     @db.Uuid
+  status             String
+  affectedResources  Int
+  processedResources Int        @default(0)
+  attemptCount       Int        @default(0)
+  attemptId          String?    @db.Uuid
+  leaseUntil         DateTime?  @db.Timestamptz(6)
+  nextAttemptAt      DateTime?  @db.Timestamptz(6)
+  errorCode          String?
+  createdAt          DateTime   @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime   @updatedAt @db.Timestamptz(6)
+  owner              User       @relation("deletionOwner", fields: [ownerId], references: [id])
+  requestedBy        User       @relation("deletionRequester", fields: [requestedById], references: [id])
+  resources          Resource[]
+  @@index([ownerId, createdAt, id])
+  @@index([status, leaseUntil])
+}
+
+model Outbox {
+  id              String    @id @default(uuid()) @db.Uuid
+  entityId        String    @db.Uuid
+  type            String
+  version         Int       @default(1)
+  payload         Json
+  publishAttempts Int       @default(0)
+  availableAt     DateTime  @default(now()) @db.Timestamptz(6)
+  publishedAt     DateTime? @db.Timestamptz(6)
+  attemptId       String?   @db.Uuid
+  leaseUntil      DateTime? @db.Timestamptz(6)
+  errorCode       String?
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  @@unique([type, entityId, version])
+  @@index([availableAt, createdAt, id])
+}
