@@ -7,14 +7,17 @@
     "node": ">=24.12.0 <25"
   },
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
     "contracts:generate": "node packages/contracts/scripts/generate.ts",
     "contracts:check": "node packages/contracts/scripts/generate.ts --check",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "npm run typecheck && npm run contracts:check && npm test"
+    "check": "npm run typecheck && npm run contracts:check && npm test",
+    "migrate": "npm run migrate -w @drive-clone/server",
+    "bootstrap": "npm run bootstrap -w @drive-clone/server"
   },
   "devDependencies": {
     "typescript": "5.9.3",

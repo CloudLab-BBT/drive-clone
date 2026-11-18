@@ -4,7 +4,7 @@ Aplicación de almacenamiento y compartición de archivos para el Taller 2 de Cl
 
 ## Estado del proyecto
 
-El repositorio contiene la especificación v1 de la API, los mensajes de cola y los esquemas compartidos, junto con sus pruebas de contrato. La interfaz, la API, el trabajador y las migraciones están pendientes de implementación.
+El repositorio contiene la especificación v1 de la API y una base de entorno O02 con React, API, proceso trabajador, PostgreSQL, LocalStack, migraciones y health checks. La autenticación, la API de archivos y el procesamiento de cargas están pendientes.
 
 ## Requisitos
 
@@ -26,3 +26,5 @@ npm run check
 - [Arquitectura y especificaciones](docs/README.md).
 - [Uso del paquete de contratos](packages/contracts/README.md).
 - [Resultados de validación](docs/validacion-o01.md).
+- [Operación del entorno O02](docs/operacion-o02.md).
+- [Resultados de validación O02](docs/validacion-o02.md).

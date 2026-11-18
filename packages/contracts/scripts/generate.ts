@@ -10,7 +10,9 @@ for (const [name, document] of Object.entries(documents)) {
   const content = JSON.stringify(document) + '\n';
   const file = new URL(name, directory);
   if (process.argv.includes('--check')) {
-    if (await readFile(file, 'utf8') !== content) throw new Error(`Contrato generado desactualizado: ${name}`);
+    if ((await readFile(file, 'utf8')).replace(/\r\n/g, '\n') !== content.replace(/\r\n/g, '\n')) {
+      throw new Error(`Contrato generado desactualizado: ${name}`);
+    }
   } else await writeFile(file, content);
 }
 console.log('Contratos verificados.');
