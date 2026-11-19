@@ -26,5 +26,10 @@
     "@apidevtools/swagger-parser": "13.1.0",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1"
+  },
+  "allowScripts": {
+    "argon2@0.43.0": true,
+    "prisma@7.10.1": true,
+    "@prisma/engines@7.10.1": true
   }
 }
