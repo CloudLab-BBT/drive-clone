@@ -1,6 +1,13 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { App } from './App.tsx';
+import './index.css';
 
-createRoot(document.getElementById('root')!).render(
-  <React.StrictMode><main><h1>Clon de Drive</h1><p>Entorno inicial listo. Las funciones de archivos se implementan en tareas posteriores.</p></main></React.StrictMode>,
-);
+const container = document.getElementById('root');
+if (container) {
+  createRoot(container).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>,
+  );
+}

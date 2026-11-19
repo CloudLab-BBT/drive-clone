@@ -16,11 +16,11 @@ services:
       retries: 12
 
   localstack:
-    image: localstack/localstack-pro:2026.3.0@sha256:4a8632f0de3888e594ff8f2d9c6e8371309ccf19469c317a9b5a074b6334c31c
+    image: localstack/localstack:4.4.0
     environment:
       SERVICES: s3,sqs
       PERSISTENCE: '1'
-      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:?Configurar LOCALSTACK_AUTH_TOKEN}
+      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:-}
     volumes:
       - localstack_data:/var/lib/localstack
     networks: [internal]
@@ -50,6 +50,9 @@ services:
       SQS_QUEUE: drive-uploads
       SQS_DLQ: drive-uploads-dlq
       TEMP_DIR: /app/temp
+      SESSION_SECRET: ${SESSION_SECRET:?Configurar SESSION_SECRET}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://127.0.0.1:8080}
     depends_on:
       postgres: { condition: service_healthy }
     networks: [internal]
