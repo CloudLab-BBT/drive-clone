@@ -3,7 +3,7 @@ import { SQSClient } from '@aws-sdk/client-sqs';
 import pg from 'pg';
 import { config } from './config.ts';
 
-export const pool = new pg.Pool({ connectionString: config.databaseUrl, max: 5, connectionTimeoutMillis: 2000 });
+export const pool = new pg.Pool({ connectionString: config.databaseUrl, max: 5, connectionTimeoutMillis: 2000, query_timeout: 2000 });
 const aws = {
   endpoint: config.awsEndpoint,
   region: config.awsRegion,

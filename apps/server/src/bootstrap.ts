@@ -42,7 +42,7 @@ async function main(): Promise<void> {
   await sqs.send(new SetQueueAttributesCommand({ QueueUrl: queueUrl, Attributes: {
     VisibilityTimeout: '60',
     ReceiveMessageWaitTimeSeconds: '20',
-    RedrivePolicy: JSON.stringify({ deadLetterTargetArn: arn, maxReceiveCount: 5 }),
+    RedrivePolicy: JSON.stringify({ deadLetterTargetArn: arn, maxReceiveCount: 20 }),
   } }));
   process.stdout.write('Recursos S3/SQS verificados\n');
 }
