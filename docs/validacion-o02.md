@@ -1,6 +1,6 @@
 # Validación de O02
 
-Fecha: 2026-11-19. Estado: correcciones de revisión aplicadas; migración nueva pendiente de ejecución real por motor Docker inaccesible.
+Fecha: 2026-11-19. Estado: correcciones de revisión validadas localmente; ejecución de CI pendiente de la tarea de pipeline.
 
 | Comprobación | Resultado | Alcance |
 | --- | --- | --- |
@@ -23,4 +23,4 @@ La prueba de salud arrancó también la API con dependencias deliberadamente ina
 
 ## Correcciones de la revisión del 2026-11-19
 
-La migración `202611190001_review_fixes` rechaza autorreferencia o padre inexistente, hace inmutable `kind`, exige los cuatro metadatos de FILE ACTIVE y añade el índice de concesiones por recurso. Bootstrap fija 20 recepciones antes de DLQ. Readiness público vuelve al DTO Health de O01, con diagnósticos solo internos y timeout de dos segundos. Los tests HTTP y de tipos aprobaron. El motor Docker no respondió durante la nueva comprobación, por lo que **la migración adicional y los tres rechazos SQL siguen pendientes de ejecución real**; los resultados anteriores sobre PostgreSQL no los acreditan.
+La migración `202611190001_review_fixes` se aplicó en PostgreSQL 17.7 y no dejó migraciones pendientes al repetir `migrate deploy`. En una transacción revertida, PostgreSQL rechazó autorreferencia, padre inexistente, cambio de `kind` en carpeta con hijo y cada uno de los cuatro metadatos nulos de FILE ACTIVE. Bootstrap quedó con `maxReceiveCount=20`, leído directamente de SQS. Readiness público respondió `{"status":"ok"}` con 200 y el test HTTP comprobó `{"status":"unavailable"}` con 503, sin diagnósticos públicos. Aprobaron 30 pruebas, tipos y `git diff --check`. La ejecución del pipeline CI aún corresponde a otra tarea.
