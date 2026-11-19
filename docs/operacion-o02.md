@@ -37,7 +37,7 @@ Los volúmenes llevan el prefijo del proyecto Compose `drive-clone-dev`; no ejec
 ## Diagnóstico
 
 - `/api/v1/health/live` responde si el proceso API atiende HTTP, incluso con dependencias caídas.
-- `/api/v1/health/ready` devuelve 200 o 503 con resultados booleanos de PostgreSQL, bucket, cola, DLQ y temporal. Cada comprobación tiene límite de tres segundos y no devuelve credenciales ni errores internos.
+- `/api/v1/health/ready` devuelve solo `{ "status": "ok" }` (200) o `{ "status": "unavailable" }` (503). Cada comprobación tiene límite de dos segundos. El detalle por dependencia queda en `/internal/health/diagnostics`, fuera del proxy público.
 - El trabajador ofrece `/health/live` y `/health/ready` en su red interna, puerto 3001. Su healthcheck Compose consulta readiness. No implica que procese cargas.
 - `docker compose ps`, `docker compose logs api worker migrate bootstrap` y `docker compose run --rm migrate` ayudan a aislar fallos. El último comando reaplica migraciones pendientes de forma idempotente.
 - Para comprobar permisos del temporal: `docker compose exec api node -e "require('fs').writeFileSync('/app/temp/check','ok')"` y `docker compose exec worker node -e "console.log(require('fs').readFileSync('/app/temp/check','utf8'))"`. Retirar el archivo con `docker compose exec api rm /app/temp/check`.
@@ -46,6 +46,6 @@ Los volúmenes llevan el prefijo del proyecto Compose `drive-clone-dev`; no ejec
 
 Con token y motor disponibles, ejecutar `docker compose up --build -d` desde volúmenes vacíos y repetir el mismo comando. Verificar que las tablas, bucket, cola y DLQ existen y que la segunda ejecución no modifica ni elimina datos. Escribir un objeto de prueba y enviar un mensaje de prueba a la DLQ con identificador único; registrar bytes/hash y cuerpo/ID. Reiniciar únicamente LocalStack con `docker compose restart localstack`; recuperar el objeto, comparar el hash y recibir el mensaje. Usar un nombre de objeto y un mensaje específicos de la prueba para no interferir con cargas reales. Repetir readiness con PostgreSQL o LocalStack detenidos y restaurados; liveness debe permanecer disponible y readiness pasar de 503 a 200. Registrar salidas, plan/token disponible y compatibilidad del token CI sin incluir secretos.
 
-## Validación pendiente
+## Validación
 
-En este equipo, Docker CLI y Compose están instalados, pero el motor no responde. Tampoco se detectó `LOCALSTACK_AUTH_TOKEN` configurado. Por eso no se han ejecutado migración limpia, bootstrap real, lectura tras reinicio, cola tras reinicio, caída/recuperación de dependencias ni permisos del temporal. Deben probarse antes de aceptar O02.
+El arranque, migraciones, bootstrap, persistencia de objeto y mensaje, y acceso cruzado al temporal se ejecutaron con LocalStack Student. Consulte `validacion-o02.md` para resultados y límites. La ejecución del pipeline CI corresponde a otra tarea.

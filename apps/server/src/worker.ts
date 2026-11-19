@@ -9,7 +9,8 @@ app.get('/health/live', async () => ({ status: 'ok' }));
 app.get('/health/ready', async (_request, reply) => {
   const result = await readiness();
   if (!result.ready) reply.code(503);
-  return result;
+  return { status: result.ready ? 'ok' : 'unavailable' };
 });
+app.get('/internal/health/diagnostics', async () => readiness());
 process.on('SIGTERM', () => { void app.close().then(closeClients); });
 await app.listen({ host: '0.0.0.0', port: 3001 });

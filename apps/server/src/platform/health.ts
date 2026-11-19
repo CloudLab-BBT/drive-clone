@@ -6,7 +6,7 @@ import { GetQueueUrlCommand } from '@aws-sdk/client-sqs';
 import { config } from './config.ts';
 import { pool, s3, sqs } from './clients.ts';
 
-export async function bounded(name: string, check: () => Promise<unknown>, timeoutMs = 3000): Promise<[string, boolean]> {
+export async function bounded(name: string, check: () => Promise<unknown>, timeoutMs = 2000): Promise<[string, boolean]> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
@@ -22,16 +22,17 @@ export async function bounded(name: string, check: () => Promise<unknown>, timeo
 }
 
 export async function readiness(): Promise<{ ready: boolean; checks: Record<string, boolean> }> {
+  const signal = AbortSignal.timeout(2000);
   const entries = await Promise.all([
     bounded('database', async () => { await pool.query('SELECT 1'); }),
-    bounded('bucket', async () => { await s3.send(new HeadBucketCommand({ Bucket: config.bucket })); }),
-    bounded('queue', async () => { await sqs.send(new GetQueueUrlCommand({ QueueName: config.queueName })); }),
-    bounded('dlq', async () => { await sqs.send(new GetQueueUrlCommand({ QueueName: config.dlqName })); }),
+    bounded('bucket', async () => { await s3.send(new HeadBucketCommand({ Bucket: config.bucket }), { abortSignal: signal }); }),
+    bounded('queue', async () => { await sqs.send(new GetQueueUrlCommand({ QueueName: config.queueName }), { abortSignal: signal }); }),
+    bounded('dlq', async () => { await sqs.send(new GetQueueUrlCommand({ QueueName: config.dlqName }), { abortSignal: signal }); }),
     bounded('temporary', async () => {
       await mkdir(config.tempDir, { recursive: true });
       await access(config.tempDir, constants.R_OK | constants.W_OK);
       const path = join(config.tempDir, `.health-${randomUUID()}`);
-      await writeFile(path, '', { flag: 'wx' });
+      await writeFile(path, '', { flag: 'wx', signal });
       await unlink(path);
     }),
   ]);
