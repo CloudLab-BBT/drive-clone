@@ -17,6 +17,7 @@ import { AppError } from './modules/identity/errors.ts';
 
 export interface BuildAppOptions {
   sessionStore?: Parameters<typeof fastifySession>[1]['store'];
+  sessionSecret?: string;
   identityService?: IdentityService;
   readinessCheck?: () => Promise<{ ready: boolean; checks: Record<string, boolean> }>;
   rateLimit?: boolean | {
@@ -26,7 +27,8 @@ export interface BuildAppOptions {
 }
 
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
-  requireAuthConfig();
+  const sessionSecret = options.sessionSecret ?? authConfig.sessionSecret;
+  requireAuthConfig(sessionSecret);
 
   const app = Fastify({
     trustProxy: true,
@@ -69,7 +71,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   // 4. Gestión de Sesiones persistente en PostgreSQL
   await app.register(fastifySession, {
-    secret: authConfig.sessionSecret,
+    secret: sessionSecret,
     cookieName: authConfig.sessionCookieName,
     store: sessionStore,
     saveUninitialized: true,
@@ -105,6 +107,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     }
     return { status: 'ok' as const };
   });
+  app.get('/internal/health/diagnostics', async () => (options.readinessCheck ?? readiness)());
 
   // 7. Módulo de Identidad y Sesiones (O04)
   await app.register(authPlugin, {

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import fastifySession from '@fastify/session';
 import { buildApp } from '../app.ts';
 import { bounded } from './health.ts';
+
+const TEST_SESSION_SECRET = 'test-session-secret-with-at-least-32-characters';
 
 describe('comprobación de dependencias', () => {
   it('distingue éxito, fallo y timeout sin exponer la causa', async () => {
@@ -15,6 +18,8 @@ describe('comprobación de dependencias', () => {
       for (const ready of [true, false]) {
         const app = await buildApp({
           rateLimit: false,
+          sessionSecret: TEST_SESSION_SECRET,
+          sessionStore: new fastifySession.MemoryStore(),
           readinessCheck: async () => ({ ready, checks: { database: ready } }),
         });
         await app.ready();
@@ -23,6 +28,28 @@ describe('comprobación de dependencias', () => {
         expect(response.json()).toEqual({ status: ready ? 'ok' : 'unavailable' });
         await app.close();
       }
+    });
+
+    it('devuelve diagnósticos completos sin acceder a PostgreSQL', async () => {
+      const app = await buildApp({
+        rateLimit: false,
+        sessionSecret: TEST_SESSION_SECRET,
+        sessionStore: new fastifySession.MemoryStore(),
+        readinessCheck: async () => ({
+          ready: false,
+          checks: { database: false, bucket: true, queue: true, dlq: true, temporary: true },
+        }),
+      });
+      await app.ready();
+
+      const response = await app.inject('/internal/health/diagnostics');
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        ready: false,
+        checks: { database: false, bucket: true, queue: true, dlq: true, temporary: true },
+      });
+      await app.close();
     });
   });
 });

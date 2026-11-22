@@ -9,8 +9,8 @@ export const authConfig = {
   rateLimitRegister: { max: 5, timeWindow: 3_600_000 },   // 5/hora/IP
 };
 
-export function requireAuthConfig(): void {
-  if (!authConfig.sessionSecret || authConfig.sessionSecret.length < 32) {
+export function requireAuthConfig(sessionSecret = authConfig.sessionSecret): void {
+  if (!sessionSecret || sessionSecret.length < 32) {
     throw new Error('SESSION_SECRET debe tener al menos 32 caracteres');
   }
 }
