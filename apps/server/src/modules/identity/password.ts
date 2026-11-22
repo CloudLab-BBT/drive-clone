@@ -7,7 +7,7 @@ export interface Argon2Options {
   memoryCost: number;
   timeCost: number;
   parallelism: number;
-  type: number;
+  type: 0 | 1 | 2;
 }
 
 export const ARGON2_CONFIG: Argon2Options = {
@@ -34,7 +34,7 @@ export function validatePassword(password: string): { valid: boolean; error?: st
 export async function hashPassword(password: string): Promise<string> {
   const validation = validatePassword(password);
   if (!validation.valid) {
-    throw new Error(validation.error);
+    throw new Error(validation.error ?? 'Contraseña inválida');
   }
   return argon2.hash(password, {
     type: ARGON2_CONFIG.type,

@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import type { Pool, PoolClient } from 'pg';
+import type { Session } from 'fastify';
 
 export interface StoredSession {
   id: string;
@@ -22,7 +23,7 @@ export class PgSessionStore extends EventEmitter {
     this.pool = pool;
   }
 
-  get(sid: string, callback: (err: Error | null, result?: Record<string, unknown> | null) => void): void {
+  get(sid: string, callback: (err: Error | null, result?: Session | null) => void): void {
     this.pool.query(
       'SELECT id, "userId", data, "createdAt", "lastSeenAt", "expiresAt" FROM "Session" WHERE id = $1 AND "expiresAt" > NOW()',
       [sid],
@@ -32,13 +33,13 @@ export class PgSessionStore extends EventEmitter {
         return;
       }
       const row = result.rows[0];
-      callback(null, row.data as Record<string, unknown>);
+      callback(null, row.data as Session);
     }).catch((err) => {
       callback(err as Error);
     });
   }
 
-  set(sid: string, session: Record<string, unknown>, callback: (err?: Error | null) => void): void {
+  set(sid: string, session: Session, callback: (err?: Error | null) => void): void {
     const userId = ((session as any).userId as string) ?? ((session as any).user?.id as string) ?? null;
     const expiresAt = this.extractExpiresAt(session);
     const data = JSON.stringify(session);
@@ -62,7 +63,7 @@ export class PgSessionStore extends EventEmitter {
   compareAndSet(
     sid: string,
     expectedGeneration: string,
-    session: Record<string, unknown>,
+    session: Session,
     callback: (err?: Error | null) => void,
   ): void {
     this.pool.query(
