@@ -7,3 +7,5 @@
 Las funciones de salud devuelven booleanos por dependencia; `bounded(name, check, timeoutMs)` recibe un nombre y una operación asíncrona y devuelve `[nombre, disponible]`. Los clientes usan `DATABASE_URL`, `AWS_ENDPOINT`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET`, `SQS_QUEUE`, `SQS_DLQ` y `TEMP_DIR`.
 
 [Autorización común (O05)](src/modules/authorization/README.md) documenta la política, las consultas de visibilidad, el uso desde rutas y su validación.
+
+[Primera carga por cola (O06)](../../docs/carga-o06.md) documenta endpoints, estados, temporal, mensaje y límites del recorrido.

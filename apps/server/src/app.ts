@@ -14,6 +14,7 @@ import { createRequireAuth } from './modules/identity/auth-hooks.ts';
 import './modules/identity/auth-types.ts';
 import { setAppErrorHandler } from './platform/error-handler.ts';
 import { AppError } from './modules/identity/errors.ts';
+import { registerUploadRoutes } from './modules/uploads/routes.ts';
 
 export interface BuildAppOptions {
   sessionStore?: Parameters<typeof fastifySession>[1]['store'];
@@ -115,6 +116,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     identityService,
     rateLimit: options.rateLimit,
   });
+
+  await app.register(registerUploadRoutes, { prefix: '/api/v1' });
 
   return app;
 }

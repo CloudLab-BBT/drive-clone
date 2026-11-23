@@ -20,6 +20,12 @@ export function setAppErrorHandler(app: FastifyInstance): void {
     } else if (statusCode === 429) {
       code = 'RATE_LIMITED';
       message = 'Demasiadas solicitudes, intente más tarde';
+    } else if (statusCode === 413) {
+      code = 'PAYLOAD_TOO_LARGE';
+      message = 'Archivo demasiado grande';
+    } else if (statusCode === 415) {
+      code = 'UNSUPPORTED_FORMAT';
+      message = 'Formato no admitido';
     } else if (error.validation) {
       statusCode = 400;
       code = 'INVALID_INPUT';
@@ -36,6 +42,7 @@ export function setAppErrorHandler(app: FastifyInstance): void {
     } else {
       message = error.message || 'Error en la solicitud';
     }
+    if (statusCode === 429) reply.header('Retry-After', '1');
     reply.code(statusCode).send({
       code, message, requestId: request.id, ...(fields ? { fields } : {}),
     });
