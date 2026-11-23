@@ -9,6 +9,12 @@ locales de `.env.docker.example` son marcadores, no secretos: use valores
 aleatorios solo para entornos persistentes. Las pruebas aisladas usan una clave
 efímera y no requieren `.env`, LocalStack ni servicios de desarrollo.
 
+La rama O03 integra O06 desde `main`; `package.json` y `package-lock.json`
+incluyen sus dependencias, incluida `@fastify/multipart`. Se validó `npm ci`
+desde una instalación limpia en el contenedor Node 24: instaló 451 paquetes
+sin errores. npm informó 3 vulnerabilidades altas en la auditoría informativa
+de dependencias.
+
 Para instalar y ejecutar los controles de código en el contenedor Node:
 
 ```sh
@@ -28,7 +34,7 @@ docker run --rm -v "$PWD:/app" -w /app node:24.21.0-bookworm-slim sh -c '
 | --- | --- |
 | `format:check`, `lint`, `typecheck`, `contracts:check` y `check:file-lines`, en el contenedor Node 24. | Mismos controles en el job `quality`, sin secretos. |
 | `npm run test:coverage` ejecuta pruebas unitarias y escribe cobertura. | Job `unit`, sube `reports/` como artefacto. |
-| `./scripts/test-integration-isolated.sh` hace `npm ci`, migra PostgreSQL efímero, ejecuta `npm run check` y genera JUnit de integración. | Job `integration` ejecuta el mismo flujo aislado y publica sus reportes. |
+| `./scripts/test-integration-isolated.sh` hace `npm ci`, migra PostgreSQL efímero, ejecuta `npm run check` y genera JUnit de integración. El PostgreSQL usa `--tmpfs /var/lib/postgresql/data`; el `trap EXIT` hace `docker rm -fv` y elimina solo su contenedor/red `drive-clone-ci-*`. | Job `integration` ejecuta el mismo flujo aislado y publica sus reportes. |
 | `npm run build` genera Prisma y construye el frontend; `docker compose build` construye imágenes localmente, sin publicarlas. | Job `build-and-scan` compila y construye las imágenes, sin publicar ni desplegar. |
 | `npm run audit:dependencies` guarda el resultado JSON de `npm audit`. | Job `build-and-scan` audita dependencias, filesystem, imágenes y secretos; sube reportes. |
 
@@ -56,12 +62,21 @@ y código Prisma generado. Los archivos fuente no ejecutados aparecen en el
 reporte como no cubiertos. `npm run test:coverage` escribe texto en consola y
 formatos HTML, JSON detallado/resumen y LCOV en `reports/coverage/`.
 
-Las referencias iniciales del proyecto son **85% de líneas y funciones, y 80%
-de ramas** del código propio. Son objetivos de referencia ajustables si el
-docente establece una exigencia superior; no son resultados ya alcanzados ni
-umbrales impuestos sobre módulos futuros aún sin implementar. Las pruebas deben
-cubrir especialmente decisiones críticas de permisos, raíz protegida,
-autenticación y estados terminales.
+La siguiente línea base se midió con `npm run test:coverage` después de integrar
+O06. Vitest tiene `all: true`, así que incluye módulos fuente sin pruebas y
+refleja el estado real de cobertura, no solo el código ejecutado.
+
+| Métrica | Línea base O03 + O06 | Meta de referencia | Diferencia para alcanzar meta |
+| --- | ---: | ---: | ---: |
+| Líneas | 34,47% | 85% | Faltan 50,53 puntos porcentuales |
+| Funciones | 39,80% | 85% | Faltan 45,20 puntos porcentuales |
+| Ramas | 29,41% | 80% | Faltan 50,59 puntos porcentuales |
+
+Las tres metas todavía no se alcanzan. Son objetivos de referencia ajustables
+si el docente establece una exigencia superior, no umbrales impuestos sobre
+módulos futuros aún sin implementar. Las pruebas deben cubrir especialmente
+decisiones críticas de permisos, raíz protegida, autenticación y estados
+terminales.
 
 Los reportes de auditoría de dependencias, Trivy filesystem e imágenes y
 Gitleaks se almacenan bajo `reports/` y se ignoran en Git. `npm run audit:dependencies` conserva todas las severidades en su JSON y falla
@@ -84,12 +99,39 @@ docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 \
   --report-path=/repo/reports/gitleaks-working-tree.json --redact
 ```
 
-La detección Gitleaks separa historial Git y árbol de trabajo. El pipeline usa
-`pull_request` y `push` a `main`, acciones fijadas por SHA, permisos de solo
-lectura y no recibe secretos para ejecutar código de PR.
+La detección Gitleaks separa historial Git y árbol de trabajo. Su checkout usa
+`fetch-depth: 0` para analizar el historial completo; los reportes de ambos
+escaneos usan `--redact`. El pipeline fija las acciones externas por SHA
+completo de 40 caracteres, limita permisos a `contents: read` y no entrega
+secretos a los jobs que ejecutan código de PR.
 La allowlist excluye `.env` local (ignorado por Git), reportes generados y una
 contraseña sintética fija de fixture; los demás hallazgos mantienen el fallo
 predeterminado de Gitleaks.
+
+## LocalStack Pro y GitHub Actions
+
+El job aislado `localstack-pro` valida la imagen acordada en O02:
+`localstack/localstack-pro:2026.3.0@sha256:4a8632f0de3888e594ff8f2d9c6e8371309ccf19469c317a9b5a074b6334c31c`.
+Solo se ejecuta en `push`, `workflow_dispatch` o PR del mismo repositorio; no
+se ejecuta en PRs externos no confiables. El secreto
+`LOCALSTACK_AUTH_TOKEN` se entrega al contenedor solo como variable de entorno,
+nunca se imprime, y el job informa si falta, si hay bloqueo de acceso/licencia
+o si `/_localstack/health` no queda saludable dentro de 180 segundos.
+
+Estado remoto: pendiente de ejecutar tras subir el commit. Después del `push`,
+pegar el enlace de la corrida y el resultado del job de LocalStack Pro aquí:
+
+`[PEGAR AQUÍ EL ENLACE DE LA NUEVA EJECUCIÓN DE GITHUB ACTIONS Y EL RESULTADO DEL JOB DE LOCALSTACK PRO]`
+
+La limpieza del aislamiento se comprobó localmente en éxito y fallo controlado.
+En ambos casos Docker quedó igual: **0 contenedores, 3 redes y 14 volúmenes**
+antes y después; no quedaron recursos `drive-clone-ci-*`. El `--tmpfs` evita
+crear el volumen anónimo declarado por la imagen PostgreSQL y `docker rm -fv`
+elimina cualquier volumen anónimo asociado al contenedor, sin tocar los
+recursos `drive-clone-dev_*` ni los de otros proyectos. La corrida exitosa
+aplicó las 4 migraciones; el chequeo ejecutó 89 pruebas aprobadas y 7 omitidas,
+y la integración 26 aprobadas y 7 omitidas. La prueba de fallo controlado
+retornó código 1 y también terminó sin residuos.
 
 ## Incorporar nuevas suites
 
