@@ -30,13 +30,22 @@ docker run --rm -v "$PWD:/app" -w /app node:24.21.0-bookworm-slim sh -c '
 '
 ```
 
-| Controles locales | GitHub Actions |
-| --- | --- |
-| `format:check`, `lint`, `typecheck`, `contracts:check` y `check:file-lines`, en el contenedor Node 24. | Mismos controles en el job `quality`, sin secretos. |
-| `npm run test:coverage` ejecuta pruebas unitarias y escribe cobertura. | Job `unit`, sube `reports/` como artefacto. |
-| `./scripts/test-integration-isolated.sh` hace `npm ci`, migra PostgreSQL efímero, ejecuta `npm run check` y genera JUnit de integración. El PostgreSQL usa `--tmpfs /var/lib/postgresql/data`; el `trap EXIT` hace `docker rm -fv` y elimina solo su contenedor/red `drive-clone-ci-*`. | Job `integration` ejecuta el mismo flujo aislado y publica sus reportes. |
-| `npm run build` genera Prisma y construye el frontend; `docker compose build` construye imágenes localmente, sin publicarlas. | Job `build-and-scan` compila y construye las imágenes, sin publicar ni desplegar. |
-| `npm run audit:dependencies` guarda el resultado JSON de `npm audit`. | Job `build-and-scan` audita dependencias, filesystem, imágenes y secretos; sube reportes. |
+`format:check` evalúa los archivos cambiados respecto de `BASE_REF` (o `HEAD`
+localmente). Comprueba con Prettier los archivos fuente, configuración y
+documentación compatibles, y valida la sintaxis de scripts shell con `sh -n`.
+Omite solo archivos heredados que ya existían en la base: `apps/server/src/app.ts`,
+`apps/server/src/modules/files/`, `apps/web/src/pages/` y `packages/contracts/`.
+También deja fuera `docs/decisiones.md`, documento histórico no controlado por
+O03. Los archivos nuevos, incluso bajo las rutas heredadas, siguen siendo
+comprobados.
+
+| Controles locales                                                                                                                                                                                                                                                                       | GitHub Actions                                                                            |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `format:check`, `lint`, `typecheck`, `contracts:check` y `check:file-lines`, en el contenedor Node 24.                                                                                                                                                                                  | Mismos controles en el job `quality`, sin secretos.                                       |
+| `npm run test:coverage` ejecuta pruebas unitarias y escribe cobertura.                                                                                                                                                                                                                  | Job `unit`, sube `reports/` como artefacto.                                               |
+| `./scripts/test-integration-isolated.sh` hace `npm ci`, migra PostgreSQL efímero, ejecuta `npm run check` y genera JUnit de integración. El PostgreSQL usa `--tmpfs /var/lib/postgresql/data`; el `trap EXIT` hace `docker rm -fv` y elimina solo su contenedor/red `drive-clone-ci-*`. | Job `integration` ejecuta el mismo flujo aislado y publica sus reportes.                  |
+| `npm run build` genera Prisma y construye el frontend; `docker compose build` construye imágenes localmente, sin publicarlas.                                                                                                                                                           | Job `build-and-scan` compila y construye las imágenes, sin publicar ni desplegar.         |
+| `npm run audit:dependencies` guarda el resultado JSON de `npm audit`.                                                                                                                                                                                                                   | Job `build-and-scan` audita dependencias, filesystem, imágenes y secretos; sube reportes. |
 
 Para compilación e imágenes locales, exporte placeholders antes de Compose:
 
@@ -66,11 +75,11 @@ La siguiente línea base se midió con `npm run test:coverage` después de integ
 O06. Vitest tiene `all: true`, así que incluye módulos fuente sin pruebas y
 refleja el estado real de cobertura, no solo el código ejecutado.
 
-| Métrica | Línea base O03 + O06 | Meta de referencia | Diferencia para alcanzar meta |
-| --- | ---: | ---: | ---: |
-| Líneas | 34,47% | 85% | Faltan 50,53 puntos porcentuales |
-| Funciones | 39,80% | 85% | Faltan 45,20 puntos porcentuales |
-| Ramas | 29,41% | 80% | Faltan 50,59 puntos porcentuales |
+| Métrica   | Línea base O03 + O06 | Meta de referencia |    Diferencia para alcanzar meta |
+| --------- | -------------------: | -----------------: | -------------------------------: |
+| Líneas    |               34,47% |                85% | Faltan 50,53 puntos porcentuales |
+| Funciones |               39,80% |                85% | Faltan 45,20 puntos porcentuales |
+| Ramas     |               29,41% |                80% | Faltan 50,59 puntos porcentuales |
 
 Las tres metas todavía no se alcanzan. Son objetivos de referencia ajustables
 si el docente establece una exigencia superior, no umbrales impuestos sobre
@@ -104,9 +113,20 @@ La detección Gitleaks separa historial Git y árbol de trabajo. Su checkout usa
 escaneos usan `--redact`. El pipeline fija las acciones externas por SHA
 completo de 40 caracteres, limita permisos a `contents: read` y no entrega
 secretos a los jobs que ejecutan código de PR.
-La allowlist excluye `.env` local (ignorado por Git), reportes generados y una
-contraseña sintética fija de fixture; los demás hallazgos mantienen el fallo
-predeterminado de Gitleaks.
+La allowlist global solo excluye `.env` local y reportes generados. Las fixtures
+`generic-api-key` se permiten mediante combinaciones AND de ruta y commit
+concretos; para el escaneo del árbol de trabajo, dos reglas acotan adicionalmente
+la ruta y estructura del call site. No se almacenan valores de credenciales ni
+tokens en `.gitleaks.toml`.
+
+El escaneo inicial reportó tres coincidencias en pruebas; al retirar una
+allowlist global de fixture se revelaron seis coincidencias históricas
+adicionales en pruebas O04. Todas fueron verificadas como datos sintéticos de
+prueba y quedaron permitidas solo en sus rutas/commits/regla. Dos call sites
+sintéticos vigentes usan excepciones adicionales por regla, ruta y estructura
+del código, sin valores de credenciales. La validación redactada en Docker
+recorrió 27 commits y terminó con cero hallazgos; el escaneo redactado del árbol
+de trabajo también terminó limpio.
 
 ## LocalStack Pro y GitHub Actions
 
