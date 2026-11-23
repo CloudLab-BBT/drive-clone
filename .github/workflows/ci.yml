@@ -103,7 +103,7 @@ jobs:
           docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 \
             detect --source=/repo --config=/repo/.gitleaks.toml --report-format=json --report-path=/repo/reports/gitleaks-history.json --redact
           docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 \
-            dir /repo --config=/repo/.gitleaks.toml --report-format=json --report-path=/repo/reports/gitleaks-working-tree.json --redact
+            detect --source=/repo --no-git --config=/repo/.gitleaks.toml --report-format=json --report-path=/repo/reports/gitleaks-working-tree.json --redact
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:

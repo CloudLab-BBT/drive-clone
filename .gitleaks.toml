@@ -1,63 +1,74 @@
-title = "Drive Clone secret scanning"
+title = 'Drive Clone secret scanning'
 
 [extend]
 useDefault = true
 
 [allowlist]
-description = "Ignore local environment and generated reports"
-paths = ["reports/", "(^|/)\\.env$"]
+description = 'Ignore local environment and generated or external directories'
+paths = [
+  '''^reports/''',
+  '''^node_modules/''',
+  '''^\.git/''',
+  '''(?:^|/)reports/''',
+  '''(?:^|/)node_modules/''',
+  '''(?:^|/)\.git/''',
+  '''(^|/)\.env$''',
+]
 
 [[rules]]
-id = "generic-api-key"
+id = 'generic-api-key'
 
-    [[rules.allowlists]]
-    description = "Synthetic files integration-test fixture in its introducing commit"
-    condition = "AND"
-    commits = ["4b10b77700675a4fd67666b9f1227c5ebbe10298"]
-    paths = ['''^apps/server/src/modules/files/files\.integration\.test\.ts$''']
+[[rules.allowlists]]
+description = 'Synthetic files integration-test fixture in its introducing commit'
+condition = 'AND'
+commits = ['4b10b77700675a4fd67666b9f1227c5ebbe10298']
+paths = ['''^apps/server/src/modules/files/files\.integration\.test\.ts$''']
 
-    [[rules.allowlists]]
-    description = "Synthetic upload integration-test fixture in its introducing commit"
-    condition = "AND"
-    commits = ["06414f38bf758b2ea43f951f69d252a0fa1909f7"]
-    paths = ['''^apps/server/src/modules/uploads/upload\.integration\.test\.ts$''']
+[[rules.allowlists]]
+description = 'Synthetic upload integration-test fixture in its introducing commit'
+condition = 'AND'
+commits = ['06414f38bf758b2ea43f951f69d252a0fa1909f7']
+paths = ['''^apps/server/src/modules/uploads/upload\.integration\.test\.ts$''']
 
-    [[rules.allowlists]]
-    description = "Synthetic upload integration-test fixture in its introducing commit"
-    condition = "AND"
-    commits = ["d60474bb92bd1cc535918a061c3f55f76f9bd33a"]
-    paths = ['''^apps/server/src/modules/uploads/upload\.integration\.test\.ts$''']
+[[rules.allowlists]]
+description = 'Synthetic upload integration-test fixture in its introducing commit'
+condition = 'AND'
+commits = ['d60474bb92bd1cc535918a061c3f55f76f9bd33a']
+paths = ['''^apps/server/src/modules/uploads/upload\.integration\.test\.ts$''']
 
-    [[rules.allowlists]]
-    description = "Synthetic registration integration-test fixtures in their introducing commits"
-    condition = "AND"
-    commits = [
-      "9f423e47debbad3343b56644ee1bc6626004acdc",
-      "e21773fcede34848f177b6a0c761ceb2bae6f4b9",
-      "4330ce72e7c8e53d2ec366888881c22d905778d3",
-    ]
-    paths = ['''^apps/server/src/modules/identity/auth-registration\.integration\.test\.ts$''']
+[[rules.allowlists]]
+description = 'Synthetic registration integration-test fixtures in their introducing commits'
+condition = 'AND'
+commits = [
+  '9f423e47debbad3343b56644ee1bc6626004acdc',
+  'e21773fcede34848f177b6a0c761ceb2bae6f4b9',
+  '4330ce72e7c8e53d2ec366888881c22d905778d3',
+]
+paths = ['''^apps/server/src/modules/identity/auth-registration\.integration\.test\.ts$''']
 
-    [[rules.allowlists]]
-    description = "Synthetic authentication integration-test fixtures in their introducing commits"
-    condition = "AND"
-    commits = [
-      "f4634b1974fad30411ced3bfc14becbb936f2e91",
-      "fdcaa7fe26741d59a68db4c5bdabd78744b981d7",
-      "f59d6ecc8bc4220dd03387aa5eac3a510b7b3f92",
-    ]
-    paths = ['''^apps/server/src/modules/identity/auth\.integration\.test\.ts$''']
+[[rules.allowlists]]
+description = 'Synthetic authentication integration-test fixtures in their introducing commits'
+condition = 'AND'
+commits = [
+  'f4634b1974fad30411ced3bfc14becbb936f2e91',
+  'fdcaa7fe26741d59a68db4c5bdabd78744b981d7',
+  'f59d6ecc8bc4220dd03387aa5eac3a510b7b3f92',
+]
+paths = ['''^apps/server/src/modules/identity/auth\.integration\.test\.ts$''']
 
-    [[rules.allowlists]]
-    description = "Synthetic registration fixture call site in the working tree"
-    condition = "AND"
-    regexTarget = "line"
-    regexes = ['''payload:\s*\{\s*username:\s*rawUser,\s*password:\s*['"]''']
-    paths = ['''(?:^|/)apps/server/src/modules/identity/auth-registration\.integration\.test\.ts$''']
+[[rules.allowlists]]
+description = 'Synthetic registration fixture call site in the working tree'
+condition = 'AND'
+regexTarget = 'line'
+regexes = ['''payload:\s*\{\s*username:\s*rawUser,\s*password:\s*['"]''']
+paths = ['''(?:^|/)apps/server/src/modules/identity/auth-registration\.integration\.test\.ts$''']
 
-    [[rules.allowlists]]
-    description = "Synthetic upload fixture call site in the working tree"
-    condition = "AND"
-    regexTarget = "line"
-    regexes = ['''payload:\s*\{\s*username,\s*password:\s*['"]''']
-    paths = ['''(?:^|/)apps/server/src/modules/uploads/upload\.integration\.test\.ts$''']
+[[rules.allowlists]]
+description = 'Synthetic file and upload fixture call sites in the working tree'
+condition = 'AND'
+regexTarget = 'line'
+regexes = ['''payload:\s*\{\s*username,\s*password:\s*['"]''']
+paths = [
+  '''(?:^|/)apps/server/src/modules/files/files\.integration\.test\.ts$''',
+  '''(?:^|/)apps/server/src/modules/uploads/upload\.integration\.test\.ts$''',
+]

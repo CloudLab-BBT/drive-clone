@@ -30,14 +30,14 @@ docker run --rm -v "$PWD:/app" -w /app node:24.21.0-bookworm-slim sh -c '
 '
 ```
 
-`format:check` evalúa los archivos cambiados respecto de `BASE_REF` (o `HEAD`
-localmente). Comprueba con Prettier los archivos fuente, configuración y
-documentación compatibles, y valida la sintaxis de scripts shell con `sh -n`.
-Omite solo archivos heredados que ya existían en la base: `apps/server/src/app.ts`,
-`apps/server/src/modules/files/`, `apps/web/src/pages/` y `packages/contracts/`.
-También deja fuera `docs/decisiones.md`, documento histórico no controlado por
-O03. Los archivos nuevos, incluso bajo las rutas heredadas, siguen siendo
-comprobados.
+`format:check` siempre comprueba los archivos de configuración y documentación
+propios de O03, además de los archivos agregados o modificados respecto del
+merge-base con `origin/main` (o `BASE_REF`/`HEAD` si no existe esa referencia).
+Así no toma como cambios de la PR los archivos de O07 que ya están en `main`.
+Valida con `sh -n` todos los scripts de `scripts/` y con Prettier los archivos
+compatibles, incluido TOML mediante `prettier-plugin-toml`. Excluye
+`package-lock.json` y artefactos generados; cualquier archivo nuevo o modificado
+respecto de la base se vuelve a incluir.
 
 | Controles locales                                                                                                                                                                                                                                                                       | GitHub Actions                                                                            |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
@@ -104,7 +104,7 @@ docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 \
   detect --config=/repo/.gitleaks.toml --source=/repo --report-format=json \
   --report-path=/repo/reports/gitleaks-history.json --redact
 docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 \
-  dir /repo --config=/repo/.gitleaks.toml --report-format=json \
+  detect --source=/repo --no-git --config=/repo/.gitleaks.toml --report-format=json \
   --report-path=/repo/reports/gitleaks-working-tree.json --redact
 ```
 
@@ -113,11 +113,11 @@ La detección Gitleaks separa historial Git y árbol de trabajo. Su checkout usa
 escaneos usan `--redact`. El pipeline fija las acciones externas por SHA
 completo de 40 caracteres, limita permisos a `contents: read` y no entrega
 secretos a los jobs que ejecutan código de PR.
-La allowlist global solo excluye `.env` local y reportes generados. Las fixtures
-`generic-api-key` se permiten mediante combinaciones AND de ruta y commit
-concretos; para el escaneo del árbol de trabajo, dos reglas acotan adicionalmente
-la ruta y estructura del call site. No se almacenan valores de credenciales ni
-tokens en `.gitleaks.toml`.
+La allowlist global excluye `.env` local, `reports/`, `node_modules/` y `.git/`.
+Las fixtures históricas `generic-api-key` se permiten mediante combinaciones
+AND de ruta y commit concretos; para el árbol de trabajo, reglas sin `commits`
+acotan las fixtures de archivos, cargas y registro por ruta y estructura del
+call site. No se almacenan valores de credenciales ni tokens en `.gitleaks.toml`.
 
 El escaneo inicial reportó tres coincidencias en pruebas; al retirar una
 allowlist global de fixture se revelaron seis coincidencias históricas
@@ -127,6 +127,13 @@ sintéticos vigentes usan excepciones adicionales por regla, ruta y estructura
 del código, sin valores de credenciales. La validación redactada en Docker
 recorrió 27 commits y terminó con cero hallazgos; el escaneo redactado del árbol
 de trabajo también terminó limpio.
+
+Al reproducir el escaneo del árbol con `reports/` y `node_modules/` presentes
+tras integrar O07, se encontró una fixture `generic-api-key` en
+`apps/server/src/modules/files/files.integration.test.ts:23`. Se verificó como
+dato sintético de prueba y se añadió una excepción sin `commits`, limitada por
+regla, ruta y estructura de la línea. La repetición de los dos comandos de CI
+recorrió 28 commits y terminó con cero hallazgos en ambos modos.
 
 ## LocalStack Pro y GitHub Actions
 
