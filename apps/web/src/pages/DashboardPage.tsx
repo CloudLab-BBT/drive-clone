@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext.tsx';
+import { UploadWidget } from './UploadWidget.tsx';
 
 export const DashboardPage: React.FC = () => {
   const { user, logout } = useAuth();
@@ -35,6 +36,7 @@ export const DashboardPage: React.FC = () => {
       </header>
 
       <section className="dashboard-content" aria-labelledby="section-info">
+        <UploadWidget />
         <h2 id="section-info">Información de la cuenta</h2>
         <div className="card">
           <p>
