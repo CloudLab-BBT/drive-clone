@@ -46,4 +46,10 @@ describe('Contrato HTTP publicable', () => {
       expect(Object.keys(operation.params?.properties ?? {})).toEqual(placeholders);
     }
   });
+  it('omite parentId en el esquema de /shared', () => {
+    const response = (createOpenApi().paths['/shared']?.get as {
+      responses: Record<string, { content: Record<string, { schema: unknown }> }>;
+    }).responses['200'].content['application/json'].schema;
+    expect(JSON.stringify(response)).not.toContain('parentId');
+  });
 });

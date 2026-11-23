@@ -40,7 +40,7 @@ export const operations: Operation[] = [
     params: C.ResourceParams, query: R.DeleteQuery, response: R.DeletionResponse, status: 202,
     access: 'session', csrf: true, errors: resourceErrors },
   { id: 'listShared', method: 'get', path: '/shared', summary: 'Listar entradas compartidas directamente',
-    query: C.PageQuery, response: R.ResourcePage, status: 200, access: 'session', errors: authErrors },
+    query: C.PageQuery, response: R.SharedResourcePage, status: 200, access: 'session', errors: authErrors },
   { id: 'listShares', method: 'get', path: '/resources/{id}/shares', summary: 'Listar concesiones como propietario',
     params: C.ResourceParams, query: C.PageQuery, response: R.SharePage, status: 200,
     access: 'session', errors: resourceErrors },
