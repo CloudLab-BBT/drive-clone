@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext.tsx';
 import { UploadWidget } from './UploadWidget.tsx';
+import { FileList } from './FileList.tsx';
 
 export const DashboardPage: React.FC = () => {
   const { user, logout } = useAuth();
@@ -37,6 +38,8 @@ export const DashboardPage: React.FC = () => {
 
       <section className="dashboard-content" aria-labelledby="section-info">
         <UploadWidget />
+        {user && <FileList rootId={user.rootId} title="Mis archivos" />}
+        <FileList title="Compartidos conmigo" />
         <h2 id="section-info">Información de la cuenta</h2>
         <div className="card">
           <p>
