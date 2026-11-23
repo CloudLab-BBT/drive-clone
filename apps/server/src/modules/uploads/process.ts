@@ -7,6 +7,8 @@ import { pool, s3 } from '../../platform/clients.ts';
 import { config } from '../../platform/config.ts';
 import { normalizeName } from './validation.ts';
 import type { UploadRow } from './store.ts';
+import { AuthorizationService } from '../authorization/service.ts';
+import { AppError } from '../identity/errors.ts';
 
 interface Job extends UploadRow { name: string }
 
@@ -32,7 +34,7 @@ async function acquire(id: string): Promise<{ job: Job; attemptId: string; objec
   finally { client.release(); }
 }
 
-async function renew(id: string, attemptId: string): Promise<boolean> {
+export async function renew(id: string, attemptId: string): Promise<boolean> {
   const result = await pool.query(`UPDATE "Upload" SET "leaseUntil" = now() + interval '60 seconds'
     WHERE id = $1 AND "attemptId" = $2 AND status = 'PROCESSING' AND "leaseUntil" > now()`, [id, attemptId]);
   return result.rowCount === 1;
@@ -50,6 +52,12 @@ async function complete(job: Job, attemptId: string, objectKey: string): Promise
   try {
     await client.query('BEGIN');
     await client.query('SELECT id FROM "User" WHERE id = $1 FOR UPDATE', [job.userId]);
+    const target = await client.query<{ parentId: string; status: string }>(
+      'SELECT "parentId",status FROM "Resource" WHERE id = $1 FOR UPDATE', [job.resourceId]);
+    if (target.rows[0]?.status !== 'RESERVED') { await client.query('ROLLBACK'); return false; }
+    const access = await new AuthorizationService(client).evaluate({ actorId: job.userId,
+      resourceId: target.rows[0].parentId, action: 'CREATE_CHILD' });
+    if (!access.allowed) throw new AppError('RESOURCE_UNAVAILABLE', 'Carpeta no disponible', 404);
     const result = await client.query(`UPDATE "Upload" SET status = 'COMPLETED', "leaseUntil" = NULL,
       "updatedAt" = now() WHERE id = $1 AND "attemptId" = $2 AND status = 'PROCESSING'
       AND "leaseUntil" > now() RETURNING id`, [job.id, attemptId]);
@@ -68,11 +76,11 @@ async function complete(job: Job, attemptId: string, objectKey: string): Promise
   finally { client.release(); }
 }
 
-async function fail(job: Job, attemptId: string, cleaned: boolean) {
+async function fail(job: Job, attemptId: string, cleaned: boolean, unavailable = false) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const terminal = job.attemptCount + 1 >= 3;
+    const terminal = unavailable || job.attemptCount + 1 >= 3;
     const result = await client.query(`UPDATE "Upload" SET status = $3, "attemptId" = NULL,
       "leaseUntil" = NULL, "nextAttemptAt" = CASE WHEN $4 THEN NULL ELSE now() + interval '30 seconds' END,
       "errorCode" = CASE WHEN $4 THEN 'PROCESSING_FAILED' ELSE NULL END,
@@ -120,17 +128,18 @@ export async function processUpload(id: string, renewVisibility?: () => Promise<
       await pool.query('UPDATE "Upload" SET "cleanupPending" = true WHERE id = $1', [job.id]);
     }
     return true;
-  } catch {
+  } catch (error) {
     if (completed) return true;
     if (leaseLost) return false;
     let cleaned = true;
     try { await s3.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: objectKey })); }
     catch { cleaned = false; }
-    if (job.attemptCount + 1 >= 3 && cleaned) {
+    const unavailable = error instanceof AppError && error.code === 'RESOURCE_UNAVAILABLE';
+    if ((unavailable || job.attemptCount + 1 >= 3) && cleaned) {
       try { await rm(join(config.tempDir, job.tempKey!), { force: true }); }
       catch { cleaned = false; }
     }
-    await fail(job, attemptId, cleaned);
+    await fail(job, attemptId, cleaned, unavailable);
     return false;
   } finally { clearInterval(timer); }
 }

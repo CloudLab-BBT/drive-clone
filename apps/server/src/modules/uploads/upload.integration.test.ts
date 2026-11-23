@@ -8,6 +8,11 @@ import { config } from '../../platform/config.ts';
 import type { FastifyInstance } from 'fastify';
 
 const suite = process.env.RUN_UPLOAD_INTEGRATION === 'true' ? describe : describe.skip;
+function multipart(bytes: Buffer) {
+  const boundary = 'o06-boundary';
+  return { body: Buffer.concat([Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="externo.pdf"\r\nContent-Type: application/pdf\r\n\r\n`),
+    bytes, Buffer.from(`\r\n--${boundary}--\r\n`)]), type: `multipart/form-data; boundary=${boundary}` };
+}
 
 suite('primera carga real por cola', () => {
   let app: FastifyInstance;
@@ -53,13 +58,13 @@ suite('primera carga real por cola', () => {
     expect(forbidden.statusCode).toBe(404);
     const foreignWrite = await app.inject({ method: 'PUT', url: `/api/v1/uploads/${id}/content`,
       headers: { cookie: other.cookie, origin: 'http://127.0.0.1:8080',
-        'x-csrf-token': other.csrf, 'content-type': 'application/octet-stream' }, payload: bytes });
+        'x-csrf-token': other.csrf, 'content-type': multipart(bytes).type }, payload: multipart(bytes).body });
     expect(foreignWrite.statusCode).toBe(404);
     const activeOther = await app.inject({ method: 'GET', url: '/api/v1/uploads?active=true',
       headers: { cookie: other.cookie } });
     expect(activeOther.json().items).toEqual([]);
     const received = await app.inject({ method: 'PUT', url: `/api/v1/uploads/${id}/content`,
-      headers: { ...headers, 'content-type': 'application/octet-stream' }, payload: bytes });
+      headers: { ...headers, 'content-type': multipart(bytes).type }, payload: multipart(bytes).body });
     expect(received.statusCode).toBe(202);
     expect(received.json().upload.status).toBe('QUEUED');
     let status = 'QUEUED';
@@ -89,8 +94,12 @@ suite('primera carga real por cola', () => {
       payload: { parentId: owner.rootId, name: `invalido-${randomUUID()}.pdf`, size: 4 } });
     const rejected = await app.inject({ method: 'PUT',
       url: `/api/v1/uploads/${invalid.json().upload.id}/content`,
-      headers: { ...headers, 'content-type': 'application/octet-stream' }, payload: Buffer.from('xxxx') });
+      headers: { ...headers, 'content-type': multipart(Buffer.from('xxxx')).type },
+      payload: multipart(Buffer.from('xxxx')).body });
     expect(rejected.statusCode).toBe(415);
+    const failed = await app.inject({ method: 'GET', url: `/api/v1/uploads/${invalid.json().upload.id}`,
+      headers: { cookie: owner.cookie } });
+    expect(failed.json().upload.errorCode).toBe('FORMAT_INVALID');
     const quota = await pool.query<{ reservedBytes: string }>(`SELECT "reservedBytes" FROM "User"
       WHERE id = (SELECT "ownerId" FROM "Resource" WHERE id = $1)`, [owner.rootId]);
     expect(quota.rows[0].reservedBytes).toBe('0');
@@ -105,8 +114,37 @@ suite('primera carga real por cola', () => {
         payload: { parentId: actor.rootId, name: `concurrente-${index}.pdf`, size: 1 } })));
     expect(responses.filter((response) => response.statusCode === 201)).toHaveLength(10);
     expect(responses.filter((response) => response.statusCode === 429)).toHaveLength(1);
+    const limited = responses.find((response) => response.statusCode === 429)!;
+    expect(limited.json().code).toBe('RATE_LIMITED');
+    expect(limited.headers['retry-after']).toBe('1');
     const active = await app.inject({ method: 'GET', url: '/api/v1/uploads?active=true',
       headers: { cookie: actor.cookie } });
     expect(active.json().items).toHaveLength(10);
+  }, 30_000);
+
+  it('exige multipart con un único campo file y errores públicos de O01', async () => {
+    const actor = await session();
+    const headers = { cookie: actor.cookie, origin: 'http://127.0.0.1:8080',
+      'x-csrf-token': actor.csrf };
+    const create = async (size = 4) => (await app.inject({ method: 'POST', url: '/api/v1/uploads', headers,
+      payload: { parentId: actor.rootId, name: `${randomUUID()}.pdf`, size } })).json().upload.id as string;
+    const send = async (id: string, type: string, body: Buffer) => app.inject({ method: 'PUT',
+      url: `/api/v1/uploads/${id}/content`, headers: { ...headers, 'content-type': type }, payload: body });
+    const raw = await send(await create(), 'application/octet-stream', Buffer.from('xxxx'));
+    expect([raw.statusCode, raw.json().code]).toEqual([415, 'UNSUPPORTED_FORMAT']);
+    const missing = await send(await create(), multipart(Buffer.alloc(0)).type,
+      Buffer.from('--o06-boundary--\r\n'));
+    expect([missing.statusCode, missing.json().code]).toEqual([400, 'INVALID_INPUT']);
+    const extra = Buffer.from(multipart(Buffer.from('%PDF-')).body.toString().replace(
+      '--o06-boundary--\r\n', '--o06-boundary\r\nContent-Disposition: form-data; name="other"\r\n\r\nx\r\n--o06-boundary--\r\n'));
+    const rejected = await send(await create(5), multipart(Buffer.from('xxxx')).type, extra);
+    expect([rejected.statusCode, rejected.json().code]).toEqual([400, 'INVALID_INPUT']);
+    const two = Buffer.from(multipart(Buffer.from('%PDF-')).body.toString().replace('--o06-boundary--\r\n',
+      '--o06-boundary\r\nContent-Disposition: form-data; name="file"; filename="dos.pdf"\r\n\r\n%PDF-\r\n--o06-boundary--\r\n'));
+    const duplicate = await send(await create(5), multipart(Buffer.alloc(0)).type, two);
+    expect([duplicate.statusCode, duplicate.json().code]).toEqual([400, 'INVALID_INPUT']);
+    const large = await send(await create(), multipart(Buffer.from('12345')).type,
+      multipart(Buffer.from('12345')).body);
+    expect([large.statusCode, large.json().code]).toEqual([413, 'PAYLOAD_TOO_LARGE']);
   }, 30_000);
 });

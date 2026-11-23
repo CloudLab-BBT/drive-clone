@@ -1,23 +1,26 @@
 # Validación de O06
 
-Fecha: 2026-11-22. Se utilizó Node 24.22.1 para comprobaciones locales y las imágenes fijadas de Compose para PostgreSQL 17 y LocalStack Student. Los datos de la integración se guardaron en los volúmenes del proyecto `drive-clone-o06-test`, separados de desarrollo.
+Fecha: 2026-11-23. Entorno aislado `drive-clone-o06-test` con PostgreSQL 17, LocalStack Student, API, web y trabajador en volúmenes separados de desarrollo. Node del contenedor: 24.21.0. Se añadió `SESSION_SECRET` aleatorio al `.env` local ignorado por Git para iniciar Compose; no se registran secretos aquí.
 
-## Aprobado
+## Comandos y resultados
 
-- `npm run typecheck -w @drive-clone/server`: sin errores.
-- `npm run build -w @drive-clone/web`: compilación de producción correcta.
-- Pruebas unitarias de validación y de consulta agrupada de la interfaz: aprobadas.
-- Integración `RUN_UPLOAD_INTEGRATION=true`: carga por API, Outbox, SQS, trabajador y S3 completada. Se compararon bytes y SHA-256; se verificaron rechazo de contenido inválido, aislamiento entre usuarios, error de exceso de tamaño y reentrega básica.
-- Integración de concurrencia: diez reservas activas aceptadas y la undécima rechazada con HTTP 429.
-- Integración `RUN_UPLOAD_FAILURES=true` con trabajador detenido: un fallo real al publicar en SQS conservó el evento Outbox y su reintento lo publicó; un fallo real de S3 mantuvo el recurso reservado y el reintento completó el archivo con los mismos bytes.
-- Desarrollo: liveness y readiness HTTP respondieron 200, con web, API, trabajador, PostgreSQL y LocalStack saludables.
+| Comando | Resultado |
+| --- | --- |
+| `docker compose -p drive-clone-o06-test up -d --build worker web` | Servicios iniciados; PostgreSQL, LocalStack, API y trabajador saludables. |
+| `docker compose -p drive-clone-o06-test run --rm -e RUN_UPLOAD_INTEGRATION=true -e LOG_LEVEL=silent api npx vitest run apps/server/src/modules/uploads/upload.integration.test.ts --maxWorkers=1 --fileParallelism=false --testTimeout=45000` | 3/3 aprobadas: recepción multipart, errores O01, límite 429 con `Retry-After`, aislamiento, Outbox→SQS→S3, bytes y SHA-256, reentrega. |
+| `docker compose -p drive-clone-o06-test stop worker` y `docker compose -p drive-clone-o06-test run --rm -e RUN_UPLOAD_FAILURES=true -e LOG_LEVEL=silent api npx vitest run apps/server/src/modules/uploads/upload-failures.integration.test.ts --maxWorkers=1 --fileParallelism=false --testTimeout=45000` | 3/3 aprobadas: fallo y reintento de SQS/S3, ancestro en eliminación impide publicar, renovación de lease solo para el intento activo. Trabajador detenido para evitar competencia por el mismo mensaje. |
+| `docker compose -p drive-clone-o06-test run --rm -e RUN_UPLOAD_FAILURES=true -e LOG_LEVEL=silent api npx vitest run apps/server/src/modules/uploads/lease.integration.test.ts --maxWorkers=1 --fileParallelism=false --testTimeout=45000` | 1/1 aprobada: con la respuesta S3 retenida, el temporizador renovó el lease del intento activo e invocó el callback de visibilidad; al liberar la respuesta, la publicación completó. |
+| `docker compose -p drive-clone-o06-test run --rm -e LOG_LEVEL=silent api npm run check` | Tipos, OpenAPI y suite general aprobados: 78 pruebas; 7 integraciones O06 excluidas por defecto y ejecutadas por separado arriba. |
+| `npm run build -w @drive-clone/web` (durante construcción de imagen) | Compilación de producción aprobada. |
 
-## Pendiente
+## Navegador a S3
 
-- Recuperación tras reinicio y agotamiento de intentos hasta DLQ. Los fallos y reintentos de SQS y S3 sí se comprobaron; esas condiciones adicionales aún no tienen prueba integrada.
-- Confirmación visual de la carga desde el navegador con una cuenta de prueba. La interfaz compiló y su consulta agrupada se probó como componente; el recorrido integrado usó la API real.
-- `npm audit --omit=dev` informó cinco avisos altos en `@prisma/config`, `effect`, `prisma`, `react-router` y `react-router-dom`. Corresponde una actualización compatible en la tarea de dependencias; no se alteraron versiones en O06.
+Con Playwright CLI se abrió `http://127.0.0.1:8080`, se registró una cuenta de prueba, se seleccionó `o06-browser-2311.pdf` y se pulsó **Subir**. La interfaz llegó a **Archivo disponible**. El SHA-256 local, el de `Resource.sha256` en PostgreSQL y el objeto descargado desde S3 con `awslocal s3 cp` coincidieron: `ae28f3f4b95558f5b955b5a376c315c020f1cfe0d99a7371744eed51b0661fad`. `Upload.status` quedó `COMPLETED`.
 
-## Observación de la suite general
+## Ciclos independientes
 
-`npm run check` en el proyecto Compose de pruebas aprobó tipos y contratos, pero tres pruebas previas de O04/O05 excedieron el límite de cinco segundos bajo ejecución paralela. La repetición acotada de las dos pruebas de identidad con un solo trabajador y mayor timeout pasó. Esto no constituye aprobación de la suite general en su configuración por defecto.
+`consumeQueue()` solicita mensajes con `WaitTimeSeconds: 20`; `worker.ts` ejecuta `publishOutbox`, `consumeQueue` y `reconcileExpired` en bucles separados. Con el trabajador activo se insertó un evento Outbox de prueba durante el consumo: `publishedAt` se registró a los 0,277 s de `createdAt` en una ejecución y el sondeo externo confirmó publicación en 1,9 s en otra, antes de los 20 s del long polling. Una prueba de lease comprobó que un intento `PROCESSING` vigente extiende `leaseUntil` a más de 50 s y que otro `attemptId` no puede renovarlo. Otra mantuvo retenida la respuesta S3, adelantó el temporizador 20 s y comprobó la renovación del lease y la invocación del callback que en `consumeQueue()` renueva la visibilidad SQS.
+
+## Límites de la evidencia
+
+La renovación se probó con una respuesta S3 retenida y reloj controlado; no se midió una transferencia S3 real de más de 20 s. Tampoco se probaron reinicio del trabajador, agotamiento hasta DLQ, cancelación completa ni recuperación avanzada; estas últimas capacidades corresponden a O10/O13. La descarga desde la interfaz corresponde a O07. `npm ci` informó cinco avisos altos de dependencias; no se cambiaron versiones fuera de O06.

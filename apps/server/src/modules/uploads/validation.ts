@@ -27,13 +27,13 @@ export function normalizeName(value: unknown): { name: string; nameKey: string; 
       /[\p{Cc}\p{Cf}\\/]/u.test(name)) throw new InvalidInputError('Nombre inválido');
   const extension = extname(name).slice(1).toLowerCase();
   const mimeType = formats[extension];
-  if (!mimeType) throw new AppError('FORMAT_INVALID', 'Formato no admitido', 415);
+  if (!mimeType) throw new AppError('UNSUPPORTED_FORMAT', 'Formato no admitido', 415);
   return { name, nameKey: name.toLocaleLowerCase('und'), mimeType };
 }
 
 export function validateSize(size: unknown): number {
   if (!Number.isSafeInteger(size) || Number(size) < 0) throw new InvalidInputError('Tamaño inválido');
-  if (Number(size) > MAX_FILE_BYTES) throw new AppError('FILE_TOO_LARGE', 'Archivo demasiado grande', 413);
+  if (Number(size) > MAX_FILE_BYTES) throw new AppError('PAYLOAD_TOO_LARGE', 'Archivo demasiado grande', 413);
   return Number(size);
 }
 

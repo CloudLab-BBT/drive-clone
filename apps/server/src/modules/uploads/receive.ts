@@ -23,25 +23,25 @@ export async function receiveFile(stream: Readable, upload: UploadRow, name: str
   const measure = new Transform({ transform(chunk: Buffer, _encoding, callback) {
     bytes += chunk.length;
     if (bytes > Number(upload.expectedSize)) {
-      callback(new AppError('FILE_TOO_LARGE', 'Contenido mayor que el reservado', 413));
+      callback(new AppError('PAYLOAD_TOO_LARGE', 'Contenido mayor que el reservado', 413));
       return;
     }
     if (head.length < 512) head = Buffer.concat([head, chunk.subarray(0, 512 - head.length)]);
     if (decoder) {
       try { decoder.decode(chunk, { stream: true }); }
-      catch { callback(new AppError('FORMAT_INVALID', 'Texto UTF-8 inválido', 415)); return; }
+      catch { callback(new AppError('UNSUPPORTED_FORMAT', 'Texto UTF-8 inválido', 415)); return; }
     }
     hash.update(chunk);
     callback(null, chunk);
   } });
   try {
     await pipeline(stream, measure, createWriteStream(partial, { flags: 'wx', mode: 0o600 }));
-    try { decoder?.decode(); } catch { throw new AppError('FORMAT_INVALID', 'Texto UTF-8 inválido', 415); }
-    if (bytes !== Number(upload.expectedSize)) throw new AppError('SIZE_MISMATCH', 'Tamaño recibido distinto del reservado', 409);
+    try { decoder?.decode(); } catch { throw new AppError('UNSUPPORTED_FORMAT', 'Texto UTF-8 inválido', 415); }
+    if (bytes !== Number(upload.expectedSize)) throw new AppError('INVALID_INPUT', 'Tamaño recibido distinto del reservado', 400);
     let valid = false;
     try { valid = validateSignature(extension, head); } catch { valid = false; }
     if (!valid || !(await validateContainer(partial, extension)))
-      throw new AppError('FORMAT_INVALID', 'Contenido no corresponde al formato', 415);
+      throw new AppError('UNSUPPORTED_FORMAT', 'Contenido no corresponde al formato', 415);
     await rename(partial, complete);
     return { tempKey: `${key}.ready`, bytes, sha256: hash.digest('hex') };
   } catch (error) {

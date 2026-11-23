@@ -23,6 +23,11 @@ class FakeRequest {
   }
 }
 
+class DelayedRequest extends FakeRequest {
+  static latest: DelayedRequest;
+  send() { DelayedRequest.latest = this; }
+}
+
 describe('consulta agrupada de carga en la interfaz', () => {
   afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
@@ -50,5 +55,25 @@ describe('consulta agrupada de carga en la interfaz', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
     expect(activeCalls).toBe(2);
     expect(vi.mocked(apiFetch).mock.calls.filter(([path]) => path === '/api/v1/uploads/upload-id')).toHaveLength(1);
+  });
+
+  it('conserva COMPLETED si el sondeo termina antes de responder el PUT', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('XMLHttpRequest', DelayedRequest);
+    vi.mocked(apiFetch).mockImplementation(async (path) => {
+      if (path === '/api/v1/uploads') return { upload: base } as never;
+      if (path === '/api/v1/uploads?active=true') return { items: [] } as never;
+      if (path === '/api/v1/uploads/upload-id')
+        return { upload: { ...base, status: 'COMPLETED' } } as never;
+      throw new Error(`Ruta inesperada: ${path}`);
+    });
+    const { result } = renderHook(() => useUpload());
+    let sending!: Promise<void>;
+    await act(async () => { sending = result.current.start(new File(['1234'], 'test.pdf'), 'root-id');
+      await Promise.resolve(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(result.current.upload?.status).toBe('COMPLETED');
+    await act(async () => { DelayedRequest.latest.onload?.(); await sending; });
+    expect(result.current.upload?.status).toBe('COMPLETED');
   });
 });

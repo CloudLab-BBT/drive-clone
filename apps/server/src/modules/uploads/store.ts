@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { AppError } from '../identity/errors.ts';
 import { normalizeName, validateSize } from './validation.ts';
+import { AuthorizationService } from '../authorization/service.ts';
 
 export interface UploadRow {
   id: string; userId: string; resourceId: string; status: string;
@@ -30,15 +31,19 @@ export class UploadStore {
     try {
       await client.query('BEGIN');
       await client.query('SELECT id FROM "User" WHERE id = $1 FOR UPDATE', [userId]);
-      const parent = await client.query('SELECT id FROM "Resource" WHERE id = $1 AND "ownerId" = $2 AND kind = $3 AND status = $4 FOR UPDATE',
-        [input.parentId, userId, 'FOLDER', 'ACTIVE']);
+      const access = await new AuthorizationService(client).evaluate({ actorId: userId,
+        resourceId: input.parentId, action: 'CREATE_CHILD' });
+      if (!access.allowed) throw new AppError(access.visible ? 'FORBIDDEN' : 'RESOURCE_UNAVAILABLE',
+        'Carpeta no disponible', access.visible ? 403 : 404);
+      const parent = await client.query('SELECT id FROM "Resource" WHERE id = $1 AND kind = $2 AND status = $3 FOR UPDATE',
+        [input.parentId, 'FOLDER', 'ACTIVE']);
       if (!parent.rowCount) throw new AppError('RESOURCE_UNAVAILABLE', 'Carpeta no disponible', 404);
       const quota = await client.query<{ reservedBytes: string; usedBytes: string }>('SELECT "reservedBytes", "usedBytes" FROM "User" WHERE id = $1', [userId]);
       if (BigInt(quota.rows[0].reservedBytes) + BigInt(quota.rows[0].usedBytes) + BigInt(size) > 1024n ** 3n)
         throw new AppError('QUOTA_EXCEEDED', 'Cuota excedida', 409);
       const active = await client.query<{ count: string }>(`SELECT count(*)::text AS count FROM "Upload"
         WHERE "userId" = $1 AND status NOT IN ('COMPLETED','FAILED','CANCELLED')`, [userId]);
-      if (Number(active.rows[0].count) >= 10) throw new AppError('TOO_MANY_UPLOADS', 'Demasiadas cargas activas', 429);
+      if (Number(active.rows[0].count) >= 10) throw new AppError('RATE_LIMITED', 'Demasiadas cargas activas', 429);
       const resourceId = randomUUID();
       const id = randomUUID();
       await client.query(`INSERT INTO "Resource" (id,"ownerId","parentId",kind,name,"nameKey",status,"updatedAt")
@@ -72,7 +77,7 @@ export class UploadStore {
     const result = await this.pool.query<UploadRow>(`UPDATE "Upload" SET status = 'RECEIVING', "updatedAt" = now()
       WHERE id = $1 AND "userId" = $2 AND status = 'CREATED'
       AND "createdAt" > now() - interval '15 minutes' RETURNING *`, [id, userId]);
-    if (!result.rows[0]) throw new AppError('UPLOAD_CONFLICT', 'La carga no puede recibir contenido', 409);
+    if (!result.rows[0]) throw new AppError('STATE_CONFLICT', 'La carga no puede recibir contenido', 409);
     return result.rows[0];
   }
 
@@ -84,7 +89,7 @@ export class UploadStore {
         "receivedBytes" = $4, sha256 = $5, "updatedAt" = now()
         WHERE id = $1 AND "userId" = $2 AND status = 'RECEIVING' AND "expectedSize" = $4 RETURNING *`,
       [id, userId, tempKey, bytes, sha256]);
-      if (!result.rows[0]) throw new AppError('UPLOAD_CONFLICT', 'La recepción no está vigente', 409);
+      if (!result.rows[0]) throw new AppError('STATE_CONFLICT', 'La recepción no está vigente', 409);
       await client.query(`INSERT INTO "Outbox" (id,"entityId",type,version,payload)
         VALUES ($1,$2,'UPLOAD',1,$3)`, [randomUUID(), id, JSON.stringify({ version: 1, type: 'UPLOAD', id })]);
       await client.query('COMMIT');
