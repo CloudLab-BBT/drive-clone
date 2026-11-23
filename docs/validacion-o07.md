@@ -19,3 +19,11 @@ Con Playwright CLI se registró una cuenta de prueba en `http://127.0.0.1:8080`,
 ## Pendiente
 
 Repetir la concesión READ/EDIT mediante los endpoints completos de O11 cuando estén disponibles; esta validación creó concesiones directamente en PostgreSQL para ejercitar la política O05. No se probó un corte de S3 después de empezar a transmitir bytes: el fallo previo al envío devuelve 503 y el fallo posterior interrumpe el stream. La descarga de carpetas, enlaces públicos y previsualización quedan fuera de O07.
+
+## Correcciones de revisión de la PR #11
+
+- `GET /shared` usa un esquema propio sin `parentId`; se regeneró OpenAPI. La integración PostgreSQL/S3 confirma que el destinatario puede ver y descargar el archivo compartido con los bytes originales, sin recibir el ID, nombre ni contenido de la carpeta privada.
+- La prueba de React deja pendiente la respuesta de **Más archivos**, navega o actualiza y luego libera la respuesta antigua: no cambia los elementos ni el cursor nuevo. Otra prueba confirma que la petición se cancela al desmontar la vista.
+- El cursor rechaza `2026-02-30T12:00:00.123456Z` con `400 INVALID_INPUT` antes de consultar PostgreSQL; `2024-02-29T23:59:59.987654Z` conserva sus seis decimales.
+- Comandos: `npx vitest run apps/web/src/pages/FileList.test.tsx apps/server/src/modules/files/cursor.test.ts packages/contracts/testing/openapi.test.ts` (14 pruebas aprobadas); `docker compose -p drive-clone-o07-test run --rm -e RUN_FILES_INTEGRATION=true -e LOG_LEVEL=silent api npx vitest run apps/server/src/modules/files/files.integration.test.ts --maxWorkers=1 --fileParallelism=false --testTimeout=45000` (2 aprobadas); `npm run typecheck`, `npm run contracts:check` y `npm run build -w @drive-clone/web` (aprobados). `docker compose -p drive-clone-o07-test run --rm -e LOG_LEVEL=silent api npm run check` aprobó 82 pruebas; 9 integraciones opcionales se ejecutan por separado.
+- Pendiente: validar concesiones mediante los endpoints de O11 cuando existan. La prueba de un fallo S3 posterior al inicio del stream sigue fuera de esta revisión.

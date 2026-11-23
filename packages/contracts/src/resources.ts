@@ -15,6 +15,15 @@ export const Resource = Type.Union([
 export const ResourceResponse = Type.Object({ resource: Resource }, { additionalProperties: false });
 export const ResourcePage = Type.Object({ items: Type.Array(Resource),
   nextCursor: Type.Union([Type.String(), Type.Null()]) }, { additionalProperties: false });
+export const SharedResource = Type.Union([
+  Type.Object({ ...resourceFields, kind: Type.Literal('FOLDER'), isRoot: Type.Literal(false) },
+    { additionalProperties: false }),
+  Type.Object({ ...resourceFields, kind: Type.Literal('FILE'), isRoot: Type.Literal(false),
+    size: Type.Integer({ minimum: 0 }), mimeType: Type.String({ minLength: 1 }) },
+  { additionalProperties: false }),
+], { description: 'Entrada compartida directa; omite la ubicación y los ancestros privados.' });
+export const SharedResourcePage = Type.Object({ items: Type.Array(SharedResource),
+  nextCursor: Type.Union([Type.String(), Type.Null()]) }, { additionalProperties: false });
 export const CreateFolder = Type.Object({ parentId: Uuid, name: Name }, { additionalProperties: false });
 export const RenameResource = Type.Object({ name: Name }, { additionalProperties: false });
 export const ShareInput = Type.Object({ username: Username, permission: Permission },

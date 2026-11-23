@@ -19,4 +19,12 @@ describe('cursor O07', () => {
     })).toString('base64url')])
       expect(() => decodeCursor(value, 'shared:actor')).toThrow('Cursor inválido');
   });
+
+  it('rechaza fechas imposibles y conserva microsegundos de un día bisiesto', () => {
+    const scope = 'shared:actor';
+    const invalid = encodeCursor({ ...boundary, createdAt: '2026-02-30T12:00:00.123456Z' }, scope)!;
+    expect(() => decodeCursor(invalid, scope)).toThrow('Cursor inválido');
+    const leap = { ...boundary, createdAt: '2024-02-29T23:59:59.987654Z' };
+    expect(decodeCursor(encodeCursor(leap, scope), scope)).toEqual(leap);
+  });
 });

@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../../app.ts';
 import { closeClients, pool, s3 } from '../../platform/clients.ts';
 import { config } from '../../platform/config.ts';
+import { encodeCursor } from './cursor.ts';
 
 const suite = process.env.RUN_FILES_INTEGRATION === 'true' ? describe : describe.skip;
 suite('listado y descarga O07', () => {
@@ -75,6 +76,10 @@ suite('listado y descarga O07', () => {
     expect(new Set(seen).size).toBe(27);
     expect((await get(`${base}?limit=101`)).json().code).toBe('INVALID_INPUT');
     expect((await get(`${base}?cursor=!!!`)).json().code).toBe('INVALID_INPUT');
+    const invalidDate = encodeCursor({ id: ids[0], createdAt: '2026-02-30T12:00:00.123456Z' },
+      `children:${owner.rootId}`);
+    const rejectedDate = await get(`${base}?cursor=${invalidDate}`);
+    expect([rejectedDate.statusCode, rejectedDate.json().code]).toEqual([400, 'INVALID_INPUT']);
     expect((await get(base, other.cookie)).statusCode).toBe(404);
     expect((await app.inject({ method: 'GET', url: base })).statusCode).toBe(401);
     expect((await get(`/api/v1/folders/${ids[0]}/children`)).statusCode).toBe(409);
@@ -97,6 +102,10 @@ suite('listado y descarga O07', () => {
     const listed = await get('/api/v1/shared', reader.cookie);
     expect(listed.json().items.map((item: { name: string }) => item.name)).toContain('informe-á.pdf');
     expect(JSON.stringify(listed.json())).not.toContain('Privado');
+    expect(JSON.stringify(listed.json())).not.toContain(folderId);
+    expect(JSON.stringify(listed.json())).not.toContain(owner.rootId);
+    expect(listed.json().items[0]).not.toHaveProperty('parentId');
+    expect(JSON.stringify(listed.json())).not.toContain(bytes.toString());
     const url = `/api/v1/files/${shared.id}/download`;
     const downloaded = await get(url, reader.cookie);
     expect(downloaded.statusCode).toBe(200);

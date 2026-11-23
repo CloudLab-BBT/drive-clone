@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { Readable } from 'node:stream';
-import { PageQuery, ResourcePage, ResourceParams } from '@drive-clone/contracts';
+import { PageQuery, ResourcePage, ResourceParams, SharedResourcePage } from '@drive-clone/contracts';
 import { pool, s3 } from '../../platform/clients.ts';
 import { config } from '../../platform/config.ts';
 import { AppError, InvalidInputError } from '../identity/errors.ts';
@@ -40,7 +40,7 @@ export async function registerFileRoutes(app: FastifyInstance) {
   });
 
   app.get('/shared', { preHandler: [app.requireAuth], schema: {
-    querystring: PageQuery, response: { 200: ResourcePage },
+    querystring: PageQuery, response: { 200: SharedResourcePage },
   } }, async (request) => {
     const scope = `shared:${request.user!.id}`;
     const result = await store.shared(request.user!.id,

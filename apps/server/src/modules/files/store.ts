@@ -62,7 +62,9 @@ export class FileStore {
       const found = await rows(db, result.items.map((item) => item.id));
       return { items: result.items.flatMap((item) => {
         const row = found.get(item.id);
-        return row ? [publicResource(row, item.effectivePermission)] : [];
+        if (!row) return [];
+        const { parentId: _privateParentId, ...shared } = publicResource(row, item.effectivePermission);
+        return [shared];
       }), next: result.next };
     });
   }
