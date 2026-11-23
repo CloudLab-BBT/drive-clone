@@ -15,6 +15,7 @@ import './modules/identity/auth-types.ts';
 import { setAppErrorHandler } from './platform/error-handler.ts';
 import { AppError } from './modules/identity/errors.ts';
 import { registerUploadRoutes } from './modules/uploads/routes.ts';
+import { registerFileRoutes } from './modules/files/routes.ts';
 
 export interface BuildAppOptions {
   sessionStore?: Parameters<typeof fastifySession>[1]['store'];
@@ -118,6 +119,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
 
   await app.register(registerUploadRoutes, { prefix: '/api/v1' });
+  await app.register(registerFileRoutes, { prefix: '/api/v1' });
 
   return app;
 }
