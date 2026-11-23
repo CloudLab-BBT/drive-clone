@@ -18,16 +18,7 @@ de dependencias.
 Para instalar y ejecutar los controles de código en el contenedor Node:
 
 ```sh
-docker run --rm -v "$PWD:/app" -w /app node:24.21.0-bookworm-slim sh -c '
-  apt-get update -qq && apt-get install -y -qq git &&
-  git config --global --add safe.directory /app &&
-  npm ci &&
-  npm run format:check &&
-  npm run lint &&
-  npm run typecheck &&
-  npm run contracts:check &&
-  npm run check:file-lines
-'
+docker run --rm -v "$PWD:/app" -w /app node:24.21.0-bookworm-slim sh -c 'apt-get update -qq && apt-get install -y -qq git && git config --global --add safe.directory /app && npm ci && npm run format:check && npm run lint && npm run typecheck && npm run contracts:check && npm run check:file-lines'
 ```
 
 `format:check` siempre comprueba los archivos de configuración y documentación
@@ -51,9 +42,7 @@ Para compilación e imágenes locales, exporte placeholders antes de Compose:
 
 ```sh
 docker run --rm -v "$PWD:/app" -w /app node:24.21.0-bookworm-slim sh -c 'npm ci && npm run build'
-export POSTGRES_PASSWORD=local-placeholder-password
-export SESSION_SECRET=local-placeholder-session-secret-at-least-32-chars
-export LOCALSTACK_AUTH_TOKEN=local-placeholder-token
+export POSTGRES_PASSWORD=local-placeholder-password SESSION_SECRET=local-placeholder-session-secret-at-least-32-chars LOCALSTACK_AUTH_TOKEN=local-placeholder-token
 docker compose build
 ```
 
@@ -95,17 +84,10 @@ ejemplo:
 
 ```sh
 mkdir -p reports
-docker run --rm -v "$PWD:/repo" aquasec/trivy:0.59.1 fs --skip-dirs /repo/reports --format json \
-  --output /repo/reports/trivy-filesystem.json /repo
-docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-  -v "$PWD/reports:/reports" aquasec/trivy:0.59.1 image --format json \
-  --output /reports/trivy-drive-clone-dev-api.json drive-clone-dev-api
-docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 \
-  detect --config=/repo/.gitleaks.toml --source=/repo --report-format=json \
-  --report-path=/repo/reports/gitleaks-history.json --redact
-docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 \
-  detect --source=/repo --no-git --config=/repo/.gitleaks.toml --report-format=json \
-  --report-path=/repo/reports/gitleaks-working-tree.json --redact
+docker run --rm -v "$PWD:/repo" aquasec/trivy:0.59.1 fs --skip-dirs /repo/reports --format json --output /repo/reports/trivy-filesystem.json /repo
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD/reports:/reports" aquasec/trivy:0.59.1 image --format json --output /reports/trivy-drive-clone-dev-api.json drive-clone-dev-api
+docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 detect --config=/repo/.gitleaks.toml --source=/repo --report-format=json --report-path=/repo/reports/gitleaks-history.json --redact
+docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 detect --source=/repo --no-git --config=/repo/.gitleaks.toml --report-format=json --report-path=/repo/reports/gitleaks-working-tree.json --redact
 ```
 
 La detección Gitleaks separa historial Git y árbol de trabajo. Su checkout usa
@@ -119,21 +101,9 @@ AND de ruta y commit concretos; para el árbol de trabajo, reglas sin `commits`
 acotan las fixtures de archivos, cargas y registro por ruta y estructura del
 call site. No se almacenan valores de credenciales ni tokens en `.gitleaks.toml`.
 
-El escaneo inicial reportó tres coincidencias en pruebas; al retirar una
-allowlist global de fixture se revelaron seis coincidencias históricas
-adicionales en pruebas O04. Todas fueron verificadas como datos sintéticos de
-prueba y quedaron permitidas solo en sus rutas/commits/regla. Dos call sites
-sintéticos vigentes usan excepciones adicionales por regla, ruta y estructura
-del código, sin valores de credenciales. La validación redactada en Docker
-recorrió 27 commits y terminó con cero hallazgos; el escaneo redactado del árbol
-de trabajo también terminó limpio.
-
-Al reproducir el escaneo del árbol con `reports/` y `node_modules/` presentes
-tras integrar O07, se encontró una fixture `generic-api-key` en
-`apps/server/src/modules/files/files.integration.test.ts:23`. Se verificó como
-dato sintético de prueba y se añadió una excepción sin `commits`, limitada por
-regla, ruta y estructura de la línea. La repetición de los dos comandos de CI
-recorrió 28 commits y terminó con cero hallazgos en ambos modos.
+Las excepciones cubren fixtures sintéticas, acotadas por regla y ruta (y por
+commit en el historial). La validación redactada en Docker recorrió 28 commits;
+ambos escaneos terminaron con cero hallazgos.
 
 ## LocalStack Pro y GitHub Actions
 
@@ -145,10 +115,11 @@ se ejecuta en PRs externos no confiables. El secreto
 nunca se imprime, y el job informa si falta, si hay bloqueo de acceso/licencia
 o si `/_localstack/health` no queda saludable dentro de 180 segundos.
 
-Estado remoto: pendiente de ejecutar tras subir el commit. Después del `push`,
-pegar el enlace de la corrida y el resultado del job de LocalStack Pro aquí:
-
-`[PEGAR AQUÍ EL ENLACE DE LA NUEVA EJECUCIÓN DE GITHUB ACTIONS Y EL RESULTADO DEL JOB DE LOCALSTACK PRO]`
+Estado remoto: **aprobado en verde**. La corrida de GitHub Actions completó
+los cinco jobs: `quality`, `unit`, `integration`, `build-and-scan` y
+`localstack-pro`. [Ver ejecución](https://github.com/CloudLab-BBT/drive-clone/actions/runs/45264679049).
+El job [LocalStack Pro](https://github.com/CloudLab-BBT/drive-clone/actions/runs/45264679049/job/138008336959?pr=10)
+confirmó: `LocalStack Pro: token aceptado y /_localstack/health saludable.`
 
 La limpieza del aislamiento se comprobó localmente en éxito y fallo controlado.
 En ambos casos Docker quedó igual: **0 contenedores, 3 redes y 14 volúmenes**
