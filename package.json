@@ -13,19 +13,32 @@
   "scripts": {
     "contracts:generate": "node packages/contracts/scripts/generate.ts",
     "contracts:check": "node packages/contracts/scripts/generate.ts --check",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && npm run typecheck -w @drive-clone/server && npm run typecheck -w @drive-clone/web",
+    "format:check": "sh scripts/format-check.sh",
+    "lint": "eslint \"apps/**/*.{ts,tsx}\" \"packages/**/*.{ts,tsx}\"",
     "test": "vitest run",
-    "check": "npm run typecheck && npm run contracts:check && npm test",
+    "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
+    "test:coverage": "vitest run --exclude '**/*.integration.test.ts' --coverage",
+    "test:integration": "vitest run --config vitest.integration.config.ts --reporter=default --reporter=junit --outputFile.junit=reports/integration/junit.xml",
+    "check:file-lines": "sh scripts/check-file-lines.sh",
+    "audit:dependencies": "mkdir -p reports && npm audit --audit-level=critical --json > reports/dependency-audit.json",
+    "build": "npm run generate -w @drive-clone/server && npm run build -w @drive-clone/web",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run contracts:check && npm run check:file-lines && npm test",
     "migrate": "npm run migrate -w @drive-clone/server",
     "bootstrap": "npm run bootstrap -w @drive-clone/server"
   },
   "devDependencies": {
-    "typescript": "5.9.3",
-    "vitest": "5.1.0",
-    "@types/node": "24.19.2",
     "@apidevtools/swagger-parser": "13.1.0",
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.19.2",
+    "@vitest/coverage-v8": "5.1.0",
     "ajv": "8.20.0",
-    "ajv-formats": "3.0.1"
+    "ajv-formats": "3.0.1",
+    "eslint": "10.15.0",
+    "prettier": "3.6.2",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.73.0",
+    "vitest": "5.1.0"
   },
   "allowScripts": {
     "argon2@0.43.0": true,

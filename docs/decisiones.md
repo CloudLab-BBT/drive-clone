@@ -36,6 +36,8 @@ La versión 1.0.0 está pendiente de revisión y adopción como contrato común 
 
 ## Validaciones pendientes
 
+Los controles reproducibles de formato, pruebas, cobertura, seguridad y CI se describen en [Controles de calidad](controles-calidad.md).
+
 | Componente | Referencia | Condición de cierre |
 | --- | --- | --- |
 | Contrato v1 | O01 | Registrar la revisión y la versión adoptada por sus consumidores. |

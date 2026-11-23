@@ -1,0 +1,9 @@
+title = "Drive Clone secret scanning"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Ignore local environment, generated reports and known synthetic fixture"
+paths = ["reports/", "(^|/)\\.env$"]
+regexes = ["contrasenia-valida-15"]
