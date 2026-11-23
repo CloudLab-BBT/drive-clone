@@ -76,4 +76,36 @@ describe('consulta agrupada de carga en la interfaz', () => {
     await act(async () => { DelayedRequest.latest.onload?.(); await sending; });
     expect(result.current.upload?.status).toBe('COMPLETED');
   });
+
+  it('espera la consulta pendiente aunque el PUT cambie el estado', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('XMLHttpRequest', DelayedRequest);
+    let resolveFirst!: (value: { items: typeof base[] }) => void;
+    const first = new Promise<{ items: typeof base[] }>((resolve) => { resolveFirst = resolve; });
+    let activeCalls = 0;
+    vi.mocked(apiFetch).mockImplementation(async (path) => {
+      if (path === '/api/v1/uploads') return { upload: base } as never;
+      if (path === '/api/v1/uploads?active=true') {
+        activeCalls++;
+        return activeCalls === 1 ? await first as never :
+          { items: [{ ...base, status: 'PROCESSING' }] } as never;
+      }
+      throw new Error(`Ruta inesperada: ${path}`);
+    });
+    const { result } = renderHook(() => useUpload());
+    let sending!: Promise<void>;
+    await act(async () => { sending = result.current.start(new File(['1234'], 'test.pdf'), 'root-id');
+      await Promise.resolve(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(activeCalls).toBe(1);
+    await act(async () => { DelayedRequest.latest.onload?.(); await sending; });
+    expect(result.current.upload?.status).toBe('QUEUED');
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(activeCalls).toBe(1);
+    await act(async () => { resolveFirst({ items: [{ ...base, status: 'PROCESSING' }] }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(activeCalls).toBe(2);
+    await act(async () => { await vi.advanceTimersByTimeAsync(999); });
+    expect(activeCalls).toBe(2);
+  });
 });

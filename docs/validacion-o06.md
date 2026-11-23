@@ -12,6 +12,7 @@ Fecha: 2026-11-23. Entorno aislado `drive-clone-o06-test` con PostgreSQL 17, Loc
 | `docker compose -p drive-clone-o06-test run --rm -e RUN_UPLOAD_FAILURES=true -e LOG_LEVEL=silent api npx vitest run apps/server/src/modules/uploads/lease.integration.test.ts --maxWorkers=1 --fileParallelism=false --testTimeout=45000` | 1/1 aprobada: con la respuesta S3 retenida, el temporizador renovó el lease del intento activo e invocó el callback de visibilidad; al liberar la respuesta, la publicación completó. |
 | `docker compose -p drive-clone-o06-test run --rm -e LOG_LEVEL=silent api npm run check` | Tipos, OpenAPI y suite general aprobados: 78 pruebas; 7 integraciones O06 excluidas por defecto y ejecutadas por separado arriba. |
 | `npm run build -w @drive-clone/web` (durante construcción de imagen) | Compilación de producción aprobada. |
+| `npx vitest run apps/web/src/pages/useUpload.test.tsx` | 3/3 aprobadas, incluida la regresión con consulta pendiente y cambio de estado: la siguiente consulta espera y respeta el intervalo de un segundo. |
 
 ## Navegador a S3
 

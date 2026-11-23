@@ -33,6 +33,10 @@ export function useUpload() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const active = useRef(true);
+  const status = useRef(upload?.status);
+  const inFlight = useRef(false);
+  const lastPoll = useRef(0);
+  status.current = upload?.status;
   useEffect(() => {
     active.current = true;
     return () => { active.current = false; };
@@ -43,6 +47,12 @@ export function useUpload() {
     let stopped = false;
     let timer: number;
     const poll = async () => {
+      if (stopped || !['CREATED', 'RECEIVING', 'QUEUED', 'PROCESSING'].includes(status.current ?? '')) return;
+      if (inFlight.current) { timer = window.setTimeout(() => { void poll(); }, 100); return; }
+      const wait = Math.max(0, 1000 - (Date.now() - lastPoll.current));
+      if (wait) { timer = window.setTimeout(() => { void poll(); }, wait); return; }
+      inFlight.current = true;
+      lastPoll.current = Date.now();
       const started = Date.now();
       try {
         const result = await apiFetch<{ items: Upload[] }>('/api/v1/uploads?active=true');
@@ -55,12 +65,15 @@ export function useUpload() {
           if (!stopped) setUpload(final.upload);
         }
       } catch (cause) { if (!stopped) setError((cause as Error).message); }
-      finally { if (!stopped) timer = window.setTimeout(() => { void poll(); },
-        Math.max(0, 1000 - (Date.now() - started))); }
+      finally {
+        inFlight.current = false;
+        if (!stopped && ['CREATED', 'RECEIVING', 'QUEUED', 'PROCESSING'].includes(status.current ?? ''))
+          timer = window.setTimeout(() => { void poll(); }, Math.max(0, 1000 - (Date.now() - started)));
+      }
     };
     timer = window.setTimeout(() => { void poll(); }, 1000);
     return () => { stopped = true; window.clearTimeout(timer); };
-  }, [upload?.id, upload?.status]);
+  }, [upload?.id]);
 
   async function start(file: File, parentId: string) {
     setBusy(true); setError(null); setProgress(0);
