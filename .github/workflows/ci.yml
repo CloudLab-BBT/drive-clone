@@ -1,0 +1,149 @@
+name: Quality controls
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Format, lint, types, contracts and file size
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          docker run --rm -e BASE_REF -v "$PWD:/app" -w /app node:24.21.0-bookworm-slim sh -c '
+            apt-get update -qq && apt-get install -y -qq git &&
+            git config --global --add safe.directory /app &&
+            npm ci &&
+            npm run format:check &&
+            npm run lint &&
+            npm run typecheck &&
+            npm run contracts:check &&
+            npm run check:file-lines
+          '
+
+  unit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Unit tests and coverage
+        run: |
+          docker run --rm -v "$PWD:/app" -w /app node:24.21.0-bookworm-slim sh -c \
+            'npm ci && npm run test:coverage'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: unit-reports
+          path: reports/
+          if-no-files-found: warn
+
+  integration:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Isolated PostgreSQL integration tests
+        run: ./scripts/test-integration-isolated.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: integration-reports
+          path: reports/
+          if-no-files-found: warn
+
+  build-and-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Build workspaces and Docker images
+        run: |
+          docker run --rm -v "$PWD:/app" -w /app node:24.21.0-bookworm-slim sh -c \
+            'npm ci && npm run build'
+          export POSTGRES_PASSWORD=ci-placeholder-password
+          export SESSION_SECRET=ci-placeholder-session-secret-at-least-32-chars
+          export LOCALSTACK_AUTH_TOKEN=ci-placeholder-token
+          docker compose build
+      - name: Dependency audit
+        run: |
+          mkdir -p reports
+          docker run --rm -v "$PWD:/app" -w /app node:24.21.0-bookworm-slim sh -c \
+            'npm ci && npm run audit:dependencies'
+      - name: Trivy filesystem scan
+        run: |
+          docker run --rm -v "$PWD:/repo" aquasec/trivy:0.59.1 fs \
+            --skip-dirs /repo/reports --format json \
+            --output /repo/reports/trivy-filesystem.json /repo
+      - name: Trivy image scans
+        run: |
+          for image in drive-clone-dev-api drive-clone-dev-web; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+              -v "$PWD/reports:/reports" aquasec/trivy:0.59.1 image \
+              --format json --output "/reports/trivy-${image}.json" "$image"
+          done
+      - name: Gitleaks history and working tree
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 \
+            detect --source=/repo --config=/repo/.gitleaks.toml --report-format=json --report-path=/repo/reports/gitleaks-history.json --redact
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2 \
+            detect --source=/repo --no-git --config=/repo/.gitleaks.toml --report-format=json --report-path=/repo/reports/gitleaks-working-tree.json --redact
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: build-security-reports
+          path: reports/
+          if-no-files-found: warn
+
+  localstack-pro:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Start and verify LocalStack Pro
+        env:
+          LOCALSTACK_AUTH_TOKEN: ${{ secrets.LOCALSTACK_AUTH_TOKEN }}
+        run: |
+          set -eu; container="drive-clone-ci-localstack-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          image="localstack/localstack-pro:2026.3.0@sha256:4a8632f0de3888e594ff8f2d9c6e8371309ccf19469c317a9b5a074b6334c31c"
+          trap 'docker rm -fv "$container" >/dev/null 2>&1 || true' EXIT
+          if [ -z "${LOCALSTACK_AUTH_TOKEN:-}" ]; then
+            echo "::error::LocalStack Pro bloqueado: falta el secreto LOCALSTACK_AUTH_TOKEN."; exit 1
+          fi
+          if ! docker run -d --name "$container" -p 127.0.0.1:4566:4566 -e LOCALSTACK_AUTH_TOKEN -e SERVICES=s3,sqs "$image" >/dev/null; then
+            echo "::error::LocalStack Pro no pudo iniciar; revise acceso y licencia del token."; exit 1
+          fi
+          for attempt in $(seq 1 60); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:4566/_localstack/health || true)
+            if [ "$code" = 200 ]; then
+              echo "LocalStack Pro: token aceptado y /_localstack/health saludable."
+              exit 0
+            fi
+            if ! docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null | grep -q true; then
+              break
+            fi
+            sleep 3
+          done
+          if docker logs "$container" 2>&1 | grep -Eqi 'licen[cs]e|subscription'; then
+            echo "::error::LocalStack Pro bloqueado por licencia; no se alcanzó healthcheck saludable."; exit 1
+          elif docker logs "$container" 2>&1 | grep -Eqi 'auth|token|unauthori[sz]ed|access denied'; then
+            echo "::error::LocalStack Pro bloqueado por acceso/autenticación; no se alcanzó healthcheck saludable."; exit 1
+          fi
+          echo "::error::LocalStack Pro no alcanzó /_localstack/health saludable en 180 segundos."; exit 1

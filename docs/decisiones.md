@@ -4,19 +4,19 @@ Fecha: 2026-11-17. Versión del contrato: 1.0.0. Este documento registra las tec
 
 ## Matriz de tecnologías
 
-| Componente | Línea acordada / versión consultada | Estado |
-| --- | --- | --- |
-| Runtime | Node.js 24 LTS; local 24.16.0, mínimo operativo de contratos 24.12 | Verificado para herramientas O01; parche de imagen se fija O02 |
-| Paquetes | npm workspaces; npm local 11.13.0 | Lockfile de contratos, no de servicios aún inexistentes |
-| Contratos | @sinclair/typebox 0.34.52; OpenAPI 3.1.0; JSON Schema draft-07 en mensajes | Instalado y validado en O01 |
-| Tipos y revisión | TypeScript 5.9.3, Vitest 5.1.0, Ajv 8.20.0, ajv-formats 3.0.1, swagger-parser 13.1.0 | Dependencias exclusivas de especificación/verificación |
-| Frontend | React 19 (registro: 19.3.1), Vite (registro: 8.3.8), React Router, Axios, CSS Modules | O02 fija parches y verifica React/Vite/plugins juntos |
-| API | Fastify 5 (registro: 5.12.8); @fastify/session 11.1.6; csrf-protection 8.0.2; swagger 9.9.5 | Versiones candidatas, no instaladas ni compatibilidad de conjunto probada |
-| Datos | PostgreSQL 17; Prisma 7 (registro de esa línea: 7.10.1), adaptador pg | O02 fija parches/digests y valida migración limpia; no adoptar Prisma 8 preliminar |
-| Objetos/cola | LocalStack oficial con S3/SQS/DLQ; SDK AWS JavaScript v3 | Plan/token/persistencia e imagen aún no comprobados |
-| Sesiones | Cookie, store PostgreSQL, Argon2id | O04 implementa adaptador y seguridad sin JWT/Redis |
-| Entrada | NGINX + React compilado; Docker Compose | O02 fija imágenes sin latest; Node Debian slim |
-| Calidad posterior | Testing Library, Playwright, ESLint, Prettier; GitHub Actions, Gitleaks, análisis de paquetes/imágenes; k6 | O03/O14/O15 configuran según tarea, sin publicación |
+| Componente        | Línea acordada / versión consultada                                                                        | Estado                                                                             |
+| ----------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Runtime           | Node.js 24 LTS; local 24.16.0, mínimo operativo de contratos 24.12                                         | Verificado para herramientas O01; parche de imagen se fija O02                     |
+| Paquetes          | npm workspaces; npm local 11.13.0                                                                          | Lockfile de contratos, no de servicios aún inexistentes                            |
+| Contratos         | @sinclair/typebox 0.34.52; OpenAPI 3.1.0; JSON Schema draft-07 en mensajes                                 | Instalado y validado en O01                                                        |
+| Tipos y revisión  | TypeScript 5.9.3, Vitest 5.1.0, Ajv 8.20.0, ajv-formats 3.0.1, swagger-parser 13.1.0                       | Dependencias exclusivas de especificación/verificación                             |
+| Frontend          | React 19 (registro: 19.3.1), Vite (registro: 8.3.8), React Router, Axios, CSS Modules                      | O02 fija parches y verifica React/Vite/plugins juntos                              |
+| API               | Fastify 5 (registro: 5.12.8); @fastify/session 11.1.6; csrf-protection 8.0.2; swagger 9.9.5                | Versiones candidatas, no instaladas ni compatibilidad de conjunto probada          |
+| Datos             | PostgreSQL 17; Prisma 7 (registro de esa línea: 7.10.1), adaptador pg                                      | O02 fija parches/digests y valida migración limpia; no adoptar Prisma 8 preliminar |
+| Objetos/cola      | LocalStack oficial con S3/SQS/DLQ; SDK AWS JavaScript v3                                                   | Plan/token/persistencia e imagen aún no comprobados                                |
+| Sesiones          | Cookie, store PostgreSQL, Argon2id                                                                         | O04 implementa adaptador y seguridad sin JWT/Redis                                 |
+| Entrada           | NGINX + React compilado; Docker Compose                                                                    | O02 fija imágenes sin latest; Node Debian slim                                     |
+| Calidad posterior | Testing Library, Playwright, ESLint, Prettier; GitHub Actions, Gitleaks, análisis de paquetes/imágenes; k6 | O03/O14/O15 configuran según tarea, sin publicación                                |
 
 Las versiones consultadas en npm son candidatas para los servicios pendientes. Su compatibilidad debe verificarse durante la configuración del entorno. El lockfile fija las dependencias instaladas del paquete de contratos.
 
@@ -36,16 +36,19 @@ La versión 1.0.0 está pendiente de revisión y adopción como contrato común 
 
 ## Validaciones pendientes
 
-| Componente | Referencia | Condición de cierre |
-| --- | --- | --- |
-| Contrato v1 | O01 | Registrar la revisión y la versión adoptada por sus consumidores. |
-| Entorno y versiones | O02 | Construir imágenes fijadas, ejecutar migraciones y comprobar compatibilidad de plugins y dependencias. |
-| LocalStack | O02 | Validar acceso, plan y persistencia: escribir objeto y mensaje, reiniciar y recuperarlos. |
-| Sesiones y registro | O04 | Probar creación de raíz, regeneración, expiración, logout y protección de origen/CSRF. |
-| Autorización común | O05 | Implementar y probar las decisiones por operación, propiedad y herencia. |
-| Restricciones e inventario | O02/O04/O06/O12/O13 | Materializar el modelo en migraciones coordinadas y validar su integridad. |
-| Validación de formatos | O06/O09 | Verificar firmas y estructuras con fixtures representativos y los límites de inspección definidos. |
-| Recuperación de borrados | O12/O13 | Documentar y probar la recuperación supervisada de Deletion FAILED. |
+Los controles reproducibles de formato, pruebas, cobertura, seguridad y CI se
+describen en [Controles de calidad](controles-calidad.md).
+
+| Componente                 | Referencia          | Condición de cierre                                                                                    |
+| -------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------ |
+| Contrato v1                | O01                 | Registrar la revisión y la versión adoptada por sus consumidores.                                      |
+| Entorno y versiones        | O02                 | Construir imágenes fijadas, ejecutar migraciones y comprobar compatibilidad de plugins y dependencias. |
+| LocalStack                 | O02                 | Validar acceso, plan y persistencia: escribir objeto y mensaje, reiniciar y recuperarlos.              |
+| Sesiones y registro        | O04                 | Probar creación de raíz, regeneración, expiración, logout y protección de origen/CSRF.                 |
+| Autorización común         | O05                 | Implementar y probar las decisiones por operación, propiedad y herencia.                               |
+| Restricciones e inventario | O02/O04/O06/O12/O13 | Materializar el modelo en migraciones coordinadas y validar su integridad.                             |
+| Validación de formatos     | O06/O09             | Verificar firmas y estructuras con fixtures representativos y los límites de inspección definidos.     |
+| Recuperación de borrados   | O12/O13             | Documentar y probar la recuperación supervisada de Deletion FAILED.                                    |
 
 ## Fuentes verificadas
 
