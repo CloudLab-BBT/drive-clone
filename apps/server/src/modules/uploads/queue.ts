@@ -5,6 +5,7 @@ import { pool, sqs } from '../../platform/clients.ts';
 import { config } from '../../platform/config.ts';
 import { processUpload } from './process.ts';
 import { UploadStore } from './store.ts';
+import { cleanupCancellation } from './cancel.ts';
 
 let queueUrl: string | undefined;
 async function url() {
@@ -64,4 +65,8 @@ export async function reconcileExpired(): Promise<void> {
   const store = new UploadStore(pool);
   for (const row of expired.rows) await store.fail(row.id,
     row.status === 'CREATED' ? 'EXPIRED' : 'RECEIVE_INTERRUPTED');
+  const cancelled = await pool.query<{ id: string }>(`SELECT id FROM "Upload"
+    WHERE status = 'CANCEL_REQUESTED' AND ("leaseUntil" IS NULL OR "leaseUntil" < now())
+    ORDER BY "cancelRequestedAt" LIMIT 20`);
+  for (const row of cancelled.rows) await cleanupCancellation(row.id);
 }

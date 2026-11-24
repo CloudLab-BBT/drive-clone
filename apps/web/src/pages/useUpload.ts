@@ -5,9 +5,11 @@ interface Upload {
   id: string; status: string; receivedBytes: number; size: number; errorCode?: string;
 }
 
-function sendContent(id: string, file: File, token: string, onProgress: (value: number) => void) {
+function sendContent(id: string, file: File, token: string, onProgress: (value: number) => void,
+  onRequest: (request: XMLHttpRequest) => void) {
   return new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
+    onRequest(xhr);
     xhr.open('PUT', `/api/v1/uploads/${id}/content`);
     xhr.withCredentials = true;
     xhr.setRequestHeader('x-csrf-token', token);
@@ -36,6 +38,8 @@ export function useUpload() {
   const status = useRef(upload?.status);
   const inFlight = useRef(false);
   const lastPoll = useRef(0);
+  const sending = useRef<XMLHttpRequest | null>(null);
+  const cancelled = useRef(false);
   status.current = upload?.status;
   useEffect(() => {
     active.current = true;
@@ -43,11 +47,11 @@ export function useUpload() {
   }, []);
 
   useEffect(() => {
-    if (!upload || !['CREATED', 'RECEIVING', 'QUEUED', 'PROCESSING'].includes(upload.status)) return;
+    if (!upload || !['CREATED', 'RECEIVING', 'QUEUED', 'PROCESSING', 'CANCEL_REQUESTED'].includes(upload.status)) return;
     let stopped = false;
     let timer: number;
     const poll = async () => {
-      if (stopped || !['CREATED', 'RECEIVING', 'QUEUED', 'PROCESSING'].includes(status.current ?? '')) return;
+      if (stopped || !['CREATED', 'RECEIVING', 'QUEUED', 'PROCESSING', 'CANCEL_REQUESTED'].includes(status.current ?? '')) return;
       if (inFlight.current) { timer = window.setTimeout(() => { void poll(); }, 100); return; }
       const wait = Math.max(0, 1000 - (Date.now() - lastPoll.current));
       if (wait) { timer = window.setTimeout(() => { void poll(); }, wait); return; }
@@ -59,7 +63,8 @@ export function useUpload() {
         if (stopped) return;
         const current = result.items.find((item) => item.id === upload.id);
         if (current) setUpload((previous) => previous &&
-          ['COMPLETED', 'FAILED', 'CANCELLED'].includes(previous.status) ? previous : current);
+          ['COMPLETED', 'FAILED', 'CANCELLED'].includes(previous.status) ||
+          (previous?.status === 'CANCEL_REQUESTED' && current.status !== 'CANCELLED') ? previous : current);
         else {
           const final = await apiFetch<{ upload: Upload }>(`/api/v1/uploads/${upload.id}`);
           if (!stopped) setUpload(final.upload);
@@ -67,7 +72,7 @@ export function useUpload() {
       } catch (cause) { if (!stopped) setError((cause as Error).message); }
       finally {
         inFlight.current = false;
-        if (!stopped && ['CREATED', 'RECEIVING', 'QUEUED', 'PROCESSING'].includes(status.current ?? ''))
+        if (!stopped && ['CREATED', 'RECEIVING', 'QUEUED', 'PROCESSING', 'CANCEL_REQUESTED'].includes(status.current ?? ''))
           timer = window.setTimeout(() => { void poll(); }, Math.max(0, 1000 - (Date.now() - started)));
       }
     };
@@ -76,6 +81,7 @@ export function useUpload() {
   }, [upload?.id]);
 
   async function start(file: File, parentId: string) {
+    cancelled.current = false;
     setBusy(true); setError(null); setProgress(0);
     try {
       const result = await apiFetch<{ upload: Upload }>('/api/v1/uploads', {
@@ -83,13 +89,29 @@ export function useUpload() {
       });
       if (!active.current) return;
       setUpload({ ...result.upload, status: 'RECEIVING' });
-      await sendContent(result.upload.id, file, await fetchCsrfToken(), setProgress);
+      await sendContent(result.upload.id, file, await fetchCsrfToken(), setProgress,
+        (request) => { sending.current = request; });
       if (active.current) setUpload((current) => current &&
-        ['COMPLETED', 'FAILED', 'CANCELLED'].includes(current.status) ? current :
+        ['COMPLETED', 'FAILED', 'CANCELLED', 'CANCEL_REQUESTED'].includes(current.status) ? current :
           current && { ...current, status: 'QUEUED' });
-    } catch (cause) { if (active.current) setError((cause as Error).message); }
-    finally { if (active.current) setBusy(false); }
+    } catch (cause) { if (active.current && !cancelled.current &&
+      !['CANCEL_REQUESTED', 'CANCELLED'].includes(status.current ?? ''))
+      setError((cause as Error).message); }
+    finally { sending.current = null; if (active.current) setBusy(false); }
   }
 
-  return { upload, progress, error, busy, start };
+  async function cancel() {
+    if (!upload) return;
+    setError(null);
+    try {
+      const result = await apiFetch<{ upload: Upload }>(`/api/v1/uploads/${upload.id}/cancel`,
+        { method: 'POST' });
+      if (!active.current) return;
+      cancelled.current = true;
+      setUpload(result.upload);
+      sending.current?.abort();
+    } catch (cause) { if (active.current) setError((cause as Error).message); }
+  }
+
+  return { upload, progress, error, busy, start, cancel };
 }

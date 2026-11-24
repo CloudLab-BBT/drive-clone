@@ -10,6 +10,7 @@ import { AppError, InvalidInputError } from '../identity/errors.ts';
 import { receiveFile } from './receive.ts';
 import { MAX_FILE_BYTES } from './validation.ts';
 import { UploadStore, publicUpload } from './store.ts';
+import { cleanupCancellation, requestCancellation } from './cancel.ts';
 
 const uuid = { type: 'string', format: 'uuid' };
 const params = { type: 'object', required: ['id'], properties: { id: uuid } };
@@ -45,7 +46,8 @@ export async function registerUploadRoutes(app: FastifyInstance) {
       const row = await store.start(id, userId);
       const resource = await pool.query<{ name: string }>('SELECT name FROM "Resource" WHERE id = $1', [row.resourceId]);
       try {
-        const result = await receiveFile(first.value.file, row, resource.rows[0].name);
+        const result = await receiveFile(first.value.file, row, resource.rows[0].name,
+          async () => (await store.get(id, userId)).status === 'CANCEL_REQUESTED');
         try {
           const extra = await parts.next();
           if (!extra.done) throw new InvalidInputError('Se requiere exactamente un campo file');
@@ -62,6 +64,7 @@ export async function registerUploadRoutes(app: FastifyInstance) {
           : error instanceof AppError && ['INVALID_INPUT', 'PAYLOAD_TOO_LARGE'].includes(error.code)
             ? 'SIZE_MISMATCH' : 'RECEIVE_INTERRUPTED';
         await store.fail(id, code);
+        await cleanupCancellation(id, true);
         if (multipartCode === 'FST_REQ_FILE_TOO_LARGE')
           throw new AppError('PAYLOAD_TOO_LARGE', 'Archivo demasiado grande', 413);
         if (['FST_PARTS_LIMIT', 'FST_FILES_LIMIT', 'FST_FIELDS_LIMIT'].includes(multipartCode ?? ''))
@@ -69,6 +72,15 @@ export async function registerUploadRoutes(app: FastifyInstance) {
         throw error;
       }
     });
+
+  app.post('/uploads/:id/cancel', { preHandler: mutation, schema: { params,
+    response: { 200: UploadResponse } } }, async (request) => {
+    const { id } = request.params as { id: string };
+    const userId = request.user!.id;
+    await requestCancellation(id, userId);
+    await cleanupCancellation(id);
+    return { upload: publicUpload(await store.get(id, userId)) };
+  });
 
   app.get('/uploads', { preHandler: [app.requireAuth], schema: { response: { 200: ActiveUploads }, querystring: {
     type: 'object', additionalProperties: false, required: ['active'], properties: { active: { const: 'true' } },

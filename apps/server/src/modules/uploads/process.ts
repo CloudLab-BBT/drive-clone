@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -9,6 +9,8 @@ import { normalizeName } from './validation.ts';
 import type { UploadRow } from './store.ts';
 import { AuthorizationService } from '../authorization/service.ts';
 import { AppError } from '../identity/errors.ts';
+import { cleanupCancellation } from './cancel.ts';
+import { verifyTemp } from './verify.ts';
 
 interface Job extends UploadRow { name: string }
 
@@ -33,20 +35,11 @@ async function acquire(id: string): Promise<{ job: Job; attemptId: string; objec
   } catch (error) { await client.query('ROLLBACK'); throw error; }
   finally { client.release(); }
 }
-
 export async function renew(id: string, attemptId: string): Promise<boolean> {
   const result = await pool.query(`UPDATE "Upload" SET "leaseUntil" = now() + interval '60 seconds'
     WHERE id = $1 AND "attemptId" = $2 AND status = 'PROCESSING' AND "leaseUntil" > now()`, [id, attemptId]);
   return result.rowCount === 1;
 }
-
-async function verifyTemp(path: string, expectedSize: number, expectedHash: string): Promise<void> {
-  const hash = createHash('sha256');
-  let bytes = 0;
-  for await (const chunk of createReadStream(path)) { bytes += chunk.length; hash.update(chunk); }
-  if (bytes !== expectedSize || hash.digest('hex') !== expectedHash) throw new Error('Temporal alterado');
-}
-
 async function complete(job: Job, attemptId: string, objectKey: string): Promise<boolean> {
   const client = await pool.connect();
   try {
@@ -75,11 +68,11 @@ async function complete(job: Job, attemptId: string, objectKey: string): Promise
   } catch (error) { await client.query('ROLLBACK'); throw error; }
   finally { client.release(); }
 }
-
 async function fail(job: Job, attemptId: string, cleaned: boolean, unavailable = false) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query('SELECT id FROM "User" WHERE id = $1 FOR UPDATE', [job.userId]);
     const terminal = unavailable || job.attemptCount + 1 >= 3;
     const result = await client.query(`UPDATE "Upload" SET status = $3, "attemptId" = NULL,
       "leaseUntil" = NULL, "nextAttemptAt" = CASE WHEN $4 THEN NULL ELSE now() + interval '30 seconds' END,
@@ -97,12 +90,11 @@ async function fail(job: Job, attemptId: string, cleaned: boolean, unavailable =
   } catch (error) { await client.query('ROLLBACK'); throw error; }
   finally { client.release(); }
 }
-
 export async function processUpload(id: string, renewVisibility?: () => Promise<void>): Promise<boolean> {
   const acquired = await acquire(id);
   if (!acquired) {
     const state = await pool.query<{ status: string }>('SELECT status FROM "Upload" WHERE id = $1', [id]);
-    return !state.rows[0] || ['COMPLETED', 'FAILED', 'CANCELLED'].includes(state.rows[0].status);
+    return !state.rows[0] || ['COMPLETED', 'FAILED', 'CANCELLED', 'CANCEL_REQUESTED'].includes(state.rows[0].status);
   }
   const { job, attemptId, objectKey } = acquired;
   let leaseLost = false;
@@ -120,6 +112,9 @@ export async function processUpload(id: string, renewVisibility?: () => Promise<
       ContentLength: Number(job.receivedBytes), ContentType: normalizeName(job.name).mimeType }));
     if (leaseLost || !(await complete(job, attemptId, objectKey))) {
       await s3.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: objectKey }));
+      await pool.query(`UPDATE "Upload" SET "leaseUntil" = NULL WHERE id = $1
+        AND "attemptId" = $2 AND status = 'CANCEL_REQUESTED'`, [id, attemptId]);
+      await cleanupCancellation(id);
       return false;
     }
     completed = true;
@@ -130,6 +125,16 @@ export async function processUpload(id: string, renewVisibility?: () => Promise<
     return true;
   } catch (error) {
     if (completed) return true;
+    const state = await pool.query<{ status: string }>('SELECT status FROM "Upload" WHERE id = $1', [id]);
+    if (state.rows[0]?.status === 'CANCEL_REQUESTED') {
+      try {
+        await s3.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: objectKey }));
+        await pool.query(`UPDATE "Upload" SET "leaseUntil" = NULL WHERE id = $1
+          AND "attemptId" = $2 AND status = 'CANCEL_REQUESTED'`, [id, attemptId]);
+        await cleanupCancellation(id);
+      } catch { /* La conciliación reintentará la limpieza. */ }
+      return false;
+    }
     if (leaseLost) return false;
     let cleaned = true;
     try { await s3.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: objectKey })); }

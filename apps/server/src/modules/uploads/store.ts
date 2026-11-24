@@ -102,6 +102,10 @@ export class UploadStore {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+      const owner = await client.query<{ userId: string }>(
+        'SELECT "userId" FROM "Upload" WHERE id = $1', [id]);
+      if (owner.rows[0]) await client.query('SELECT id FROM "User" WHERE id = $1 FOR UPDATE',
+        [owner.rows[0].userId]);
       const failed = await client.query<{ userId: string; expectedSize: string; resourceId: string }>(
         `UPDATE "Upload" SET status = 'FAILED', "errorCode" = $2, "updatedAt" = now()
         WHERE id = $1 AND status IN ('RECEIVING','CREATED') RETURNING "userId","expectedSize","resourceId"`, [id, code]);

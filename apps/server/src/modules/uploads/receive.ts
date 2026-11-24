@@ -9,7 +9,8 @@ import { config } from '../../platform/config.ts';
 import { validateContainer, validateSignature } from './validation.ts';
 import type { UploadRow } from './store.ts';
 
-export async function receiveFile(stream: Readable, upload: UploadRow, name: string) {
+export async function receiveFile(stream: Readable, upload: UploadRow, name: string,
+  cancelled?: () => Promise<boolean>) {
   await mkdir(config.tempDir, { recursive: true });
   const key = randomUUID();
   const partial = join(config.tempDir, `${key}.part`);
@@ -20,6 +21,15 @@ export async function receiveFile(stream: Readable, upload: UploadRow, name: str
   let bytes = 0;
   let head = Buffer.alloc(0);
   const timeout = setTimeout(() => stream.destroy(new Error('Tiempo máximo de recepción agotado')), 600_000);
+  let checking = false;
+  const cancelTimer = cancelled && setInterval(() => {
+    if (checking) return;
+    checking = true;
+    void cancelled().then((stop) => {
+      if (stop) stream.destroy(new AppError('STATE_CONFLICT', 'Carga cancelada', 409));
+    }).catch(() => { /* El sondeo siguiente volverá a consultar. */ })
+      .finally(() => { checking = false; });
+  }, 200);
   const measure = new Transform({ transform(chunk: Buffer, _encoding, callback) {
     bytes += chunk.length;
     if (bytes > Number(upload.expectedSize)) {
@@ -48,5 +58,5 @@ export async function receiveFile(stream: Readable, upload: UploadRow, name: str
     await rm(partial, { force: true });
     await rm(complete, { force: true });
     throw error;
-  } finally { clearTimeout(timeout); }
+  } finally { clearTimeout(timeout); if (cancelTimer) clearInterval(cancelTimer); }
 }
