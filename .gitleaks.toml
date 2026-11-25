@@ -37,6 +37,19 @@ commits = ['d60474bb92bd1cc535918a061c3f55f76f9bd33a']
 paths = ['''^apps/server/src/modules/uploads/upload\.integration\.test\.ts$''']
 
 [[rules.allowlists]]
+description = 'Synthetic cancellation HTTP test password in O10 introducing commit; no service credential'
+condition = 'AND'
+commits = ['b171ef787df8c71f4d39ce8b390e12c2ec67e31f']
+paths = ['''^apps/server/src/modules/uploads/cancel-api\.integration\.test\.ts$''']
+
+[[rules.allowlists]]
+description = 'Synthetic cancellation HTTP test password in working tree'
+condition = 'AND'
+regexTarget = 'line'
+regexes = ['''password:\s*'clave-larga-de-prueba-123456'[,]?''']
+paths = ['''(?:^|/)apps/server/src/modules/uploads/cancel-api\.integration\.test\.ts$''']
+
+[[rules.allowlists]]
 description = 'Synthetic registration integration-test fixtures in their introducing commits'
 condition = 'AND'
 commits = [

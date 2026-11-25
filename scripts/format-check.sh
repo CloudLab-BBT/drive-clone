@@ -23,19 +23,7 @@ else
   changed_files=$(git diff --name-only --diff-filter=ACMR HEAD; git ls-files --others --exclude-standard)
 fi
 
-owned_files='
-.github/workflows/ci.yml
-.gitleaks.toml
-.prettierrc.json
-eslint.config.js
-vitest.config.ts
-vitest.integration.config.ts
-apps/web/tsconfig.json
-docs/controles-calidad.md
-docs/decisiones.md
-README.md
-'
-files=$(printf '%s\n%s\n' "$owned_files" "$changed_files" | sed '/^$/d' | sort -u)
+files=$(printf '%s\n' "$changed_files" | sed '/^$/d' | sort -u)
 prettier_files=
 toml_files=
 for file in $files; do
