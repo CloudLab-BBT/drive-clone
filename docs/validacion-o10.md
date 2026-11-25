@@ -61,9 +61,20 @@ test`: 99 pruebas pasan; 14 se omiten por banderas de integración.
   del commit `b171ef7`. Es la contraseña fija de una cuenta creada por la prueba,
   no una credencial de servicio. La excepción histórica limita regla, archivo y
   commit; la excepción del árbol de trabajo limita regla, archivo y línea.
-- `npm run typecheck`, `npm run lint` y `npm run contracts:check`: pasan localmente.
-  Docker Desktop no estaba disponible para repetir la integración aislada o
-  Gitleaks. El nuevo resultado de GitHub Actions se registrará aquí.
+- `npm run typecheck`, `npm run lint`, `npm run contracts:check` y
+  `npm run test:unit`: pasan localmente; esta última ejecutó 73 pruebas.
+- `BASE_REF=origin/main scripts/check-file-lines.sh` y
+  `scripts/format-check.sh`: pasan. En Windows se invocaron con Git Bash.
+- [GitHub Actions, commit `c9bf789`](https://github.com/CloudLab-BBT/drive-clone/actions/runs/45649078591):
+  `quality`, `unit`, `integration`, `build-and-scan` y `localstack-pro` pasan.
+  Esto confirma también Gitleaks en historial y árbol de trabajo.
+- `docker compose -p drive-clone-o10-verify up -d --build`: el entorno local
+  quedó detenido en `RUN npm ci` durante la construcción de las imágenes; se
+  interrumpió sin iniciar servicios. Las suites O10 protegidas por
+  `RUN_UPLOAD_FAILURES` y `RUN_UPLOAD_INTEGRATION` no se volvieron a ejecutar.
+  El trabajo de CI general tampoco activa esas banderas: las pruebas nuevas
+  quedan compiladas, pero su ejecución con PostgreSQL y LocalStack sigue
+  pendiente.
 
 ## Pendientes
 
