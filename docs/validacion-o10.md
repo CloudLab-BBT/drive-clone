@@ -30,17 +30,8 @@ mensaje SQS duplicado de una carga cancelada se reconoce sin volver a publicarla
 - `docker compose -p drive-clone-o10-test up -d --build`: servicios sanos.
 - `docker compose -p drive-clone-o10-test stop worker`: aísla las carreras de las
   pruebas del consumidor de fondo.
-- `docker compose -p drive-clone-o10-test run --rm -v
-"${PWD}/apps/server/src/modules/uploads:/app/apps/server/src/modules/uploads"
--e RUN_UPLOAD_FAILURES=true -e RUN_UPLOAD_INTEGRATION=true api npx vitest run
-apps/server/src/modules/uploads/cancel.integration.test.ts
-apps/server/src/modules/uploads/cancel-race.integration.test.ts
-apps/server/src/modules/uploads/cancel-api.integration.test.ts
-apps/server/src/modules/uploads/cancel-terminal-api.integration.test.ts`: esta
-  orden anterior a la corrección pasó 5 pruebas; la ejecución actual de las 7
-  pruebas se verificará en CI.
-  Cubren los cuatro estados cancelables, repetición, seguridad, fallo de limpieza,
-  reintento, carrera durante S3, late cancel y redelivery.
+- La ejecución anterior de dos suites pasó 5 pruebas. La ejecución de las cuatro
+  suites sobre el último commit de código se registra abajo.
 - Mismo contenedor con `RUN_UPLOAD_FAILURES=true` y las suites
   `upload-failures.integration.test.ts` y `lease.integration.test.ts`: 4 pruebas
   pasan.
@@ -75,6 +66,18 @@ test`: 99 pruebas pasan; 14 se omiten por banderas de integración.
   El trabajo de CI general tampoco activa esas banderas: las pruebas nuevas
   quedan compiladas, pero su ejecución con PostgreSQL y LocalStack sigue
   pendiente.
+
+## Ejecución específica de PR #12
+
+- Commit probado: `78704e297b09933d96aca990d6e6804a72942dac`.
+- Entorno aislado: `docker compose -p drive-clone-o10-pr12 up -d --build postgres localstack temp-init migrate bootstrap` y `docker compose -p drive-clone-o10-pr12 build api`. PostgreSQL y LocalStack quedaron sanos; el trabajador de fondo no se inició.
+- Comando:
+
+  ```powershell
+  docker compose -p drive-clone-o10-pr12 run --rm -e RUN_UPLOAD_FAILURES=true -e RUN_UPLOAD_INTEGRATION=true api npx vitest run apps/server/src/modules/uploads/cancel.integration.test.ts apps/server/src/modules/uploads/cancel-race.integration.test.ts apps/server/src/modules/uploads/cancel-api.integration.test.ts apps/server/src/modules/uploads/cancel-terminal-api.integration.test.ts --silent
+  ```
+
+- Resultado: 4 suites aprobadas; **7 pruebas aprobadas, 0 fallidas y 0 omitidas**. `cancel.integration.test.ts` verificó el fallo al borrar el temporal `.part`: conservó `CANCEL_REQUESTED`, `cleanupPending=true` y los 5 bytes de cuota reservada; el reintento borró `.part` y `.ready`, pasó a `CANCELLED` y liberó la cuota. `cancel-race.integration.test.ts` impidió publicar durante la escritura S3. `cancel-terminal-api.integration.test.ts` comprobó 200 para `FAILED` sin alterar su limpieza y 409 para `COMPLETED`.
 
 ## Pendientes
 
