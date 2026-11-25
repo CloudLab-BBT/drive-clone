@@ -110,38 +110,39 @@ suite('cancelación persistente de cargas', () => {
     expect((await store.get(row.id, userId)).status).toBe('CANCELLED');
   }, 30_000);
 
-  it('impide que el intento activo publique tras cancelar durante S3', async () => {
+  it('conserva la reserva si falla borrar el parcial y limpia el ready al reintentar', async () => {
     const { userId, rootId } = await actor();
-    const row = await queued(userId, rootId);
-    let release!: () => void;
-    const hold = new Promise<void>((resolve) => {
-      release = resolve;
+    const row = await store.create(userId, {
+      parentId: rootId,
+      name: `${randomUUID()}.pdf`,
+      size: 5,
     });
-    const original = s3.send.bind(s3);
-    let writing = false;
-    const spy = vi.spyOn(s3, 'send').mockImplementation((async (command: unknown) => {
-      if (command instanceof PutObjectCommand) {
-        writing = true;
-        await hold;
-      }
-      return original(command as never);
-    }) as typeof s3.send);
-    try {
-      const processing = processUpload(row.id);
-      await vi.waitFor(() => expect(writing).toBe(true));
-      const cancelled = await requestCancellation(row.id, userId);
-      expect(cancelled.status).toBe('CANCEL_REQUESTED');
-      expect(await renew(row.id, cancelled.attemptId!)).toBe(false);
-      release();
-      expect(await processing).toBe(false);
-      expect((await store.get(row.id, userId)).status).toBe('CANCELLED');
-      const resource = await pool.query('SELECT id FROM "Resource" WHERE id = $1', [
-        row.resourceId,
-      ]);
-      expect(resource.rowCount).toBe(0);
-    } finally {
-      release();
-      spy.mockRestore();
-    }
-  }, 30_000);
+    const receiving = await store.start(row.id, userId);
+    const part = join(config.tempDir, receiving.tempKey!);
+    const ready = part.replace(/\.part$/, '.ready');
+    await writeFile(part, 'parcial');
+    await writeFile(ready, 'listo');
+    await requestCancellation(row.id, userId);
+    await cleanupCancellation(row.id, true, async () => {
+      throw new Error('borrado falló');
+    });
+    const pending = await store.get(row.id, userId);
+    expect(pending.status).toBe('CANCEL_REQUESTED');
+    expect(pending.cleanupPending).toBe(true);
+    const reserved = await pool.query<{ reservedBytes: string }>(
+      'SELECT "reservedBytes" FROM "User" WHERE id = $1',
+      [userId],
+    );
+    expect(reserved.rows[0].reservedBytes).toBe('5');
+    await cleanupCancellation(row.id);
+    expect((await store.get(row.id, userId)).status).toBe('CANCELLED');
+    const after = await pool.query<{ reservedBytes: string }>(
+      'SELECT "reservedBytes" FROM "User" WHERE id = $1',
+      [userId],
+    );
+    expect(after.rows[0].reservedBytes).toBe('0');
+    await expect(import('node:fs/promises').then(({ stat }) => stat(ready))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
 });

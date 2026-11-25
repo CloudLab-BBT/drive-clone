@@ -5,8 +5,8 @@
 `POST /api/v1/uploads/{id}/cancel` exige sesión, Origin y CSRF. Solo el propietario
 puede consultar o cancelar su carga; para otro usuario responde 404. La operación
 acepta `CREATED`, `RECEIVING`, `QUEUED` y `PROCESSING`, devuelve 200 y es
-idempotente en `CANCEL_REQUESTED` y `CANCELLED`. Una carga `COMPLETED` o `FAILED`
-devuelve 409 `STATE_CONFLICT`.
+idempotente en `CANCEL_REQUESTED` y `CANCELLED`. Una carga `FAILED` devuelve 200
+sin cambiar su estado ni `cleanupPending`. `COMPLETED` devuelve 409 `STATE_CONFLICT`.
 
 La cancelación se confirma en PostgreSQL como `CANCEL_REQUESTED` antes de limpiar.
 El bloqueo del propietario serializa la solicitud con la publicación. Si completar
@@ -19,7 +19,10 @@ de cancelación y sigue consultando el estado hasta `CANCELLED`.
 de los objetos S3 de los intentos. La cuota reservada se libera al confirmar la
 limpieza y pasar a `CANCELLED`. Durante `RECEIVING`, se espera a que termine el
 stream; durante `PROCESSING`, se espera al fin del intento o al vencimiento de su
-lease. El conciliador reintenta las limpiezas pendientes cada 20 segundos. Un
+lease. Al pasar a `RECEIVING` se persiste el nombre `.part` antes de escribir;
+la limpieza busca ese archivo y su posible `.ready`. Si falla el borrado,
+`CANCEL_REQUESTED`, `cleanupPending=true` y la cuota reservada se conservan hasta
+un reintento satisfactorio. El conciliador reintenta cada 20 segundos. Un
 mensaje SQS duplicado de una carga cancelada se reconoce sin volver a publicarla.
 
 ## Evidencia
@@ -31,7 +34,11 @@ mensaje SQS duplicado de una carga cancelada se reconoce sin volver a publicarla
 "${PWD}/apps/server/src/modules/uploads:/app/apps/server/src/modules/uploads"
 -e RUN_UPLOAD_FAILURES=true -e RUN_UPLOAD_INTEGRATION=true api npx vitest run
 apps/server/src/modules/uploads/cancel.integration.test.ts
-apps/server/src/modules/uploads/cancel-api.integration.test.ts`: 5 pruebas pasan.
+apps/server/src/modules/uploads/cancel-race.integration.test.ts
+apps/server/src/modules/uploads/cancel-api.integration.test.ts
+apps/server/src/modules/uploads/cancel-terminal-api.integration.test.ts`: esta
+  orden anterior a la corrección pasó 5 pruebas; la ejecución actual de las 7
+  pruebas se verificará en CI.
   Cubren los cuatro estados cancelables, repetición, seguridad, fallo de limpieza,
   reintento, carrera durante S3, late cancel y redelivery.
 - Mismo contenedor con `RUN_UPLOAD_FAILURES=true` y las suites
@@ -43,15 +50,22 @@ test`: 99 pruebas pasan; 14 se omiten por banderas de integración.
   y `scripts/check-file-lines.sh`: pasan. La prueba de React para cancelación
   confirmada pasa dentro de la suite general.
 
-## Limitaciones verificadas
+## Correcciones y verificación actual
 
-`npm run check` se detiene en `format:check`. Marca nueve archivos sin cambios de
-O10 que ya estaban en `main` (`.github/workflows/ci.yml`, `.prettierrc.json`,
-`README.md`, `apps/web/tsconfig.json`, `docs/controles-calidad.md`,
-`docs/decisiones.md`, `eslint.config.js` y las configuraciones de Vitest), además
-de archivos modificados para O10. Se conservó el estilo compacto del módulo para
-respetar el límite de 150 líneas por archivo de código. Las demás puertas se
-ejecutaron por separado y aprobaron.
+- Prettier se aplicó a los archivos de O10. Los archivos que excedían 150 líneas
+  se dividieron por responsabilidad. `format:check` revisa los archivos del
+  cambio y deja fuera la lista fija de archivos anteriores a O10 que fallaban
+  por formato en `main`.
+- El [reporte redactado de Gitleaks](https://github.com/CloudLab-BBT/drive-clone/actions/runs/45302835439)
+  señaló `generic-api-key` en la línea 32 de `cancel-api.integration.test.ts`
+  del commit `b171ef7`. Es la contraseña fija de una cuenta creada por la prueba,
+  no una credencial de servicio. La excepción histórica limita regla, archivo y
+  commit; la excepción del árbol de trabajo limita regla, archivo y línea.
+- `npm run typecheck`, `npm run lint` y `npm run contracts:check`: pasan localmente.
+  Docker Desktop no estaba disponible para repetir la integración aislada o
+  Gitleaks. El nuevo resultado de GitHub Actions se registrará aquí.
+
+## Pendientes
 
 No hay implementación de lotes O09 ni de eliminación de carpetas que pueda iniciar
 una cancelación. Esas pruebas de integración quedan pendientes de dichas tareas.

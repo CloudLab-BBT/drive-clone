@@ -3,47 +3,13 @@ import { join } from 'node:path';
 import { DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { pool, s3 } from '../../platform/clients.ts';
 import { config } from '../../platform/config.ts';
-import { AppError } from '../identity/errors.ts';
 import type { UploadRow } from './store.ts';
 
-export async function requestCancellation(id: string, userId: string): Promise<UploadRow> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query('SELECT id FROM "User" WHERE id = $1 FOR UPDATE', [userId]);
-    const found = await client.query<UploadRow>(
-      'SELECT * FROM "Upload" WHERE id = $1 AND "userId" = $2 FOR UPDATE',
-      [id, userId],
-    );
-    const row = found.rows[0];
-    if (!row) throw new AppError('RESOURCE_UNAVAILABLE', 'Carga no disponible', 404);
-    if (row.status === 'COMPLETED')
-      throw new AppError('STATE_CONFLICT', 'La carga ya terminó', 409);
-    if (row.status === 'FAILED') throw new AppError('STATE_CONFLICT', 'La carga ya falló', 409);
-    const result =
-      row.status === 'CANCEL_REQUESTED' || row.status === 'CANCELLED'
-        ? row
-        : (
-            await client.query<UploadRow>(
-              `UPDATE "Upload" SET status = 'CANCEL_REQUESTED',
-        "cancelRequestedAt" = now(), "cleanupPending" = true,
-        "leaseUntil" = CASE WHEN status = 'RECEIVING' THEN now() + interval '10 minutes'
-          ELSE "leaseUntil" END, "updatedAt" = now()
-        WHERE id = $1 RETURNING *`,
-              [id],
-            )
-          ).rows[0];
-    await client.query('COMMIT');
-    return result;
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
-}
-
-export async function cleanupCancellation(id: string, receiverStopped = false): Promise<void> {
+export async function cleanupCancellation(
+  id: string,
+  receiverStopped = false,
+  removeTemp: typeof rm = rm,
+): Promise<void> {
   if (receiverStopped)
     await pool.query(
       `UPDATE "Upload" SET "leaseUntil" = NULL
@@ -61,7 +27,13 @@ export async function cleanupCancellation(id: string, receiverStopped = false): 
   try {
     for (const attempt of attempts.rows)
       await s3.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: attempt.objectKey }));
-    if (row.tempKey) await rm(join(config.tempDir, row.tempKey), { force: true });
+    if (row.tempKey) {
+      await removeTemp(join(config.tempDir, row.tempKey), { force: true });
+      if (row.tempKey.endsWith('.part'))
+        await removeTemp(join(config.tempDir, row.tempKey.replace(/\.part$/, '.ready')), {
+          force: true,
+        });
+    }
   } catch {
     return;
   }
@@ -107,3 +79,6 @@ export async function cleanupCancellation(id: string, receiverStopped = false): 
     client.release();
   }
 }
+
+export { requestCancellation } from './cancel-request.ts';
+export { cleanupFailed } from './cancel-failed.ts';
