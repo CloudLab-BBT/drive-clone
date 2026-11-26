@@ -1,0 +1,48 @@
+.upload-dropzone {
+  display: grid;
+  justify-items: start;
+  gap: 0.6rem;
+  padding: 1rem;
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+}
+.upload-dropzone.is-dragging {
+  border-color: var(--color-primary);
+  background: var(--color-surface);
+}
+.upload-dropzone input:focus-visible,
+.upload-items button:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}
+.upload-dropzone button,
+.upload-items button {
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.upload-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.upload-items {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+.upload-items li {
+  display: grid;
+  gap: 0.35rem;
+  overflow-wrap: anywhere;
+}
+.upload-items progress {
+  width: min(100%, 28rem);
+}
+.upload-error {
+  color: #a32121;
+}

@@ -53,10 +53,6 @@ export function useUploadPolling(
               ? previous
               : current,
           );
-        else {
-          const final = await apiFetch<{ upload: Upload }>(`/api/v1/uploads/${upload.id}`);
-          if (!stopped) setUpload(final.upload);
-        }
       } catch (cause) {
         if (!stopped) setError((cause as Error).message);
       } finally {

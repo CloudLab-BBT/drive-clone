@@ -10,7 +10,7 @@ export interface Upload {
   errorCode?: string;
 }
 
-function sendContent(
+export function sendContent(
   id: string,
   file: File,
   token: string,

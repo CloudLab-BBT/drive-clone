@@ -56,6 +56,10 @@ export async function receiveFile(
       }
       if (head.length < 512) head = Buffer.concat([head, chunk.subarray(0, 512 - head.length)]);
       if (decoder) {
+        if (chunk.includes(0)) {
+          callback(new AppError('UNSUPPORTED_FORMAT', 'Texto con bytes nulos', 415));
+          return;
+        }
         try {
           decoder.decode(chunk, { stream: true });
         } catch {

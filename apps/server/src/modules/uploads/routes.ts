@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import fastifyMultipart from '@fastify/multipart';
-import { ActiveUploads, UploadResponse } from '@drive-clone/contracts';
+import { UploadResponse } from '@drive-clone/contracts';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pool } from '../../platform/clients.ts';
@@ -11,6 +11,7 @@ import { receiveFile } from './receive.ts';
 import { MAX_FILE_BYTES } from './validation.ts';
 import { UploadStore, publicUpload } from './store.ts';
 import { cleanupCancellation, cleanupFailed, requestCancellation } from './cancel.ts';
+import { registerActiveUploadRoute } from './active-route.ts';
 
 const uuid = { type: 'string', format: 'uuid' };
 const params = { type: 'object', required: ['id'], properties: { id: uuid } };
@@ -25,6 +26,7 @@ export async function registerUploadRoutes(app: FastifyInstance) {
   await app.register(fastifyMultipart, { attachFieldsToBody: false });
   const store = new UploadStore(pool);
   const mutation = [app.requireAuth, verifyOrigin, verifyCsrf(app)];
+  registerActiveUploadRoute(app, store);
 
   app.post(
     '/uploads',
@@ -53,7 +55,12 @@ export async function registerUploadRoutes(app: FastifyInstance) {
       const parts = request.parts({
         limits: { files: 2, fields: 1, parts: 2, fileSize: MAX_FILE_BYTES + 1 },
       });
-      const first = await parts.next();
+      let first;
+      try {
+        first = await parts.next();
+      } catch {
+        throw new InvalidInputError('Se requiere exactamente un campo file');
+      }
       if (first.done || first.value.type !== 'file' || first.value.fieldname !== 'file')
         throw new InvalidInputError('Se requiere exactamente un campo file');
       const row = await store.start(id, userId);
@@ -79,12 +86,21 @@ export async function registerUploadRoutes(app: FastifyInstance) {
           throw error;
         }
       } catch (error) {
-        const multipartCode = (error as { code?: string }).code;
+        let failure = error;
+        if (error instanceof AppError && error.code === 'UNSUPPORTED_FORMAT') {
+          try {
+            if (!(await parts.next()).done)
+              failure = new InvalidInputError('Se requiere exactamente un campo file');
+          } catch {
+            /* El parser puede haber terminado junto con la recepción fallida. */
+          }
+        }
+        const multipartCode = (failure as { code?: string }).code;
         const code =
-          error instanceof AppError && error.code === 'UNSUPPORTED_FORMAT'
+          failure instanceof AppError && failure.code === 'UNSUPPORTED_FORMAT'
             ? 'FORMAT_INVALID'
-            : error instanceof AppError &&
-                ['INVALID_INPUT', 'PAYLOAD_TOO_LARGE'].includes(error.code)
+            : failure instanceof AppError &&
+                ['INVALID_INPUT', 'PAYLOAD_TOO_LARGE'].includes(failure.code)
               ? 'SIZE_MISMATCH'
               : 'RECEIVE_INTERRUPTED';
         await store.fail(id, code);
@@ -96,7 +112,7 @@ export async function registerUploadRoutes(app: FastifyInstance) {
           ['FST_PARTS_LIMIT', 'FST_FILES_LIMIT', 'FST_FIELDS_LIMIT'].includes(multipartCode ?? '')
         )
           throw new InvalidInputError('Se requiere exactamente un campo file');
-        throw error;
+        throw failure;
       }
     },
   );
@@ -110,27 +126,6 @@ export async function registerUploadRoutes(app: FastifyInstance) {
       await requestCancellation(id, userId);
       await cleanupCancellation(id);
       return { upload: publicUpload(await store.get(id, userId)) };
-    },
-  );
-
-  app.get(
-    '/uploads',
-    {
-      preHandler: [app.requireAuth],
-      schema: {
-        response: { 200: ActiveUploads },
-        querystring: {
-          type: 'object',
-          additionalProperties: false,
-          required: ['active'],
-          properties: { active: { const: 'true' } },
-        },
-      },
-    },
-    async (request) => {
-      if (String((request.query as { active?: string | boolean }).active) !== 'true')
-        throw new InvalidInputError('Se requiere active=true');
-      return { items: (await store.active(request.user!.id)).map(publicUpload) };
     },
   );
 
