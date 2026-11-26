@@ -58,7 +58,8 @@ export class UploadStore {
   async active(userId: string) {
     const result = await this.pool.query<UploadRow>(
       `SELECT * FROM "Upload" WHERE "userId" = $1
-      AND status NOT IN ('COMPLETED','FAILED','CANCELLED') ORDER BY "createdAt",id LIMIT 10`,
+      AND status NOT IN ('COMPLETED','FAILED','CANCELLED')
+      ORDER BY "createdAt",id LIMIT 10`,
       [userId],
     );
     return result.rows;

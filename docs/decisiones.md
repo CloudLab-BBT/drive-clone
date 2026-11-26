@@ -31,6 +31,7 @@ Las versiones consultadas en npm son candidatas para los servicios pendientes. S
 - DELETE confirmado por query, sin endpoint extra; impacto definitivo transaccional, cliente advierte variación por concurrencia.
 - Presupuesto de inspección ZIP, conservación de extensión al renombrar y parámetros de backoff/recepción/lease concretan decisiones operativas sin agregar funcionalidades.
 - Cancelación de FAILED conserva FAILED; repetición no cambia terminal. Resource no es visible antes de publicación válida.
+- La matriz, validación de formatos, límites y polling agrupado de O09 se detallan en [Carga múltiple y formatos](carga-multiple-formatos.md).
 
 La versión 1.0.0 está pendiente de revisión y adopción como contrato común de los consumidores.
 

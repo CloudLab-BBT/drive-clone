@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useUploadPolling } from './useUploadPolling.ts';
 import { apiFetch, fetchCsrfToken } from '../api/client.ts';
+import { mergeUploadStatus } from './uploadState.ts';
 
 export interface Upload {
   id: string;
@@ -10,7 +11,7 @@ export interface Upload {
   errorCode?: string;
 }
 
-function sendContent(
+export function sendContent(
   id: string,
   file: File,
   token: string,
@@ -81,11 +82,12 @@ export function useUpload() {
         sending.current = request;
       });
       if (active.current)
-        setUpload((current) =>
-          current &&
-          ['COMPLETED', 'FAILED', 'CANCELLED', 'CANCEL_REQUESTED'].includes(current.status)
-            ? current
-            : current && { ...current, status: 'QUEUED' },
+        setUpload(
+          (current) =>
+            current && {
+              ...current,
+              status: mergeUploadStatus(current.status, 'QUEUED'),
+            },
         );
     } catch (cause) {
       if (

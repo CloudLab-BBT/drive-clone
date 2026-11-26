@@ -50,10 +50,10 @@ describe('consulta agrupada de carga en la interfaz', () => {
       if (path === '/api/v1/uploads') return { upload: base } as never;
       if (path === '/api/v1/uploads?active=true') {
         activeCalls++;
-        return { items: activeCalls === 1 ? [{ ...base, status: 'PROCESSING' }] : [] } as never;
+        return {
+          items: [{ ...base, status: activeCalls === 1 ? 'PROCESSING' : 'COMPLETED' }],
+        } as never;
       }
-      if (path === '/api/v1/uploads/upload-id')
-        return { upload: { ...base, status: 'COMPLETED' } } as never;
       throw new Error(`Ruta inesperada: ${path}`);
     });
     const { result } = renderHook(() => useUpload());
@@ -76,7 +76,7 @@ describe('consulta agrupada de carga en la interfaz', () => {
     expect(activeCalls).toBe(2);
     expect(
       vi.mocked(apiFetch).mock.calls.filter(([path]) => path === '/api/v1/uploads/upload-id'),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
   });
 
   it('conserva COMPLETED si el sondeo termina antes de responder el PUT', async () => {
@@ -84,9 +84,8 @@ describe('consulta agrupada de carga en la interfaz', () => {
     vi.stubGlobal('XMLHttpRequest', DelayedRequest);
     vi.mocked(apiFetch).mockImplementation(async (path) => {
       if (path === '/api/v1/uploads') return { upload: base } as never;
-      if (path === '/api/v1/uploads?active=true') return { items: [] } as never;
-      if (path === '/api/v1/uploads/upload-id')
-        return { upload: { ...base, status: 'COMPLETED' } } as never;
+      if (path === '/api/v1/uploads?active=true')
+        return { items: [{ ...base, status: 'COMPLETED' }] } as never;
       throw new Error(`Ruta inesperada: ${path}`);
     });
     const { result } = renderHook(() => useUpload());

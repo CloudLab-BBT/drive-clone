@@ -85,3 +85,13 @@ paths = [
   '''(?:^|/)apps/server/src/modules/files/files\.integration\.test\.ts$''',
   '''(?:^|/)apps/server/src/modules/uploads/upload\.integration\.test\.ts$''',
 ]
+
+[[rules.allowlists]]
+description = 'Synthetic O09 registration passwords in isolated integration tests'
+condition = 'AND'
+regexTarget = 'line'
+regexes = ['''password:\s*['"][^'"]+['"]''']
+paths = [
+  '''(?:^|/)apps/server/src/modules/uploads/formats\.integration\.test\.ts$''',
+  '''(?:^|/)apps/server/src/modules/uploads/upload-limits\.integration\.test\.ts$''',
+]
