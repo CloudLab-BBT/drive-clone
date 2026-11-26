@@ -3,6 +3,7 @@ import { apiFetch, fetchCsrfToken } from '../api/client.ts';
 import { sendContent, type Upload } from './useUpload.ts';
 import { createUploadLimiter } from './uploadLimiter.ts';
 import { useBatchPolling } from './useBatchPolling.ts';
+import { mergeUploadStatus } from './uploadState.ts';
 
 const formats = new Set(
   'png jpg jpeg webp raw dng mp3 wav ogg m4a flac mp4 webm mov pdf doc docx ppt pptx xls xlsx odt ods odp txt csv'.split(
@@ -31,7 +32,17 @@ export function useUploadBatch() {
   useBatchPolling(files, setFiles);
 
   function update(id: string, patch: Partial<BatchFile>) {
-    setFiles((current) => current.map((file) => (file.id === id ? { ...file, ...patch } : file)));
+    setFiles((current) =>
+      current.map((file) =>
+        file.id === id
+          ? {
+              ...file,
+              ...patch,
+              ...(patch.status ? { status: mergeUploadStatus(file.status, patch.status) } : {}),
+            }
+          : file,
+      ),
+    );
   }
 
   async function addFiles(selection: FileList | File[], parentId: string) {

@@ -100,4 +100,40 @@ suite('límites atómicos de reservas O09', () => {
     await new Promise((resolve) => setTimeout(resolve, 1000));
     expect((await request()).statusCode).toBe(200);
   });
+
+  it('lista solo las diez cargas activas propias y refleja el estado puntual actualizado', async () => {
+    const user = await actor();
+    const create = (name: string) =>
+      app.inject({
+        method: 'POST',
+        url: '/api/v1/uploads',
+        headers: user.headers,
+        payload: { parentId: user.rootId, name: `${name}.pdf`, size: 12 },
+      });
+    const response = await Promise.all(
+      Array.from({ length: 10 }, (_, index) => create(`active-${index}`)),
+    );
+    const ownIds = response.map((result) => result.json().upload.id as string);
+    await pool.query(`UPDATE "Upload" SET status = 'COMPLETED' WHERE id = $1`, [ownIds[0]]);
+    const active = await app.inject({
+      method: 'GET',
+      url: '/api/v1/uploads?active=true',
+      headers: { cookie: user.cookie },
+    });
+    const expected = await pool.query<{ id: string }>(
+      `SELECT id FROM "Upload" WHERE "userId" = $1 AND status NOT IN
+      ('COMPLETED','FAILED','CANCELLED') ORDER BY "createdAt",id LIMIT 10`,
+      [user.userId],
+    );
+    expect(active.json().items.map((item: { id: string }) => item.id)).toEqual(
+      expected.rows.map((item) => item.id),
+    );
+    expect(active.json().items).toHaveLength(9);
+    const terminal = await app.inject({
+      method: 'GET',
+      url: `/api/v1/uploads/${ownIds[0]}`,
+      headers: { cookie: user.cookie },
+    });
+    expect(terminal.json().upload.status).toBe('COMPLETED');
+  });
 });

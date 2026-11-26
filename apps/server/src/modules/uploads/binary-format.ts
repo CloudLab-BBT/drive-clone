@@ -27,7 +27,7 @@ export function validateSignature(extension: string, head: Buffer): boolean {
       return (
         text(head, 0, 'fLaC') &&
         head.length >= 42 &&
-        head[4] === 0x80 &&
+        (head[4] & 0x7f) === 0 &&
         head.readUIntBE(5, 3) === 34
       );
     case 'mp3':

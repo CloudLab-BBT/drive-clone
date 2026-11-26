@@ -1,6 +1,7 @@
 import { useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import { apiFetch } from '../api/client.ts';
 import type { Upload } from './useUpload.ts';
+import { mergeUploadStatus } from './uploadState.ts';
 
 export function useUploadPolling(
   upload: Upload | null,
@@ -46,13 +47,13 @@ export function useUploadPolling(
         const result = await apiFetch<{ items: Upload[] }>('/api/v1/uploads?active=true');
         if (stopped) return;
         const current = result.items.find((item) => item.id === upload.id);
-        if (current)
-          setUpload((previous) =>
-            (previous && ['COMPLETED', 'FAILED', 'CANCELLED'].includes(previous.status)) ||
-            (previous?.status === 'CANCEL_REQUESTED' && current.status !== 'CANCELLED')
-              ? previous
-              : current,
-          );
+        const latest =
+          current ?? (await apiFetch<{ upload: Upload }>(`/api/v1/uploads/${upload.id}`)).upload;
+        if (!stopped)
+          setUpload((previous) => ({
+            ...latest,
+            status: mergeUploadStatus(previous?.status ?? latest.status, latest.status),
+          }));
       } catch (cause) {
         if (!stopped) setError((cause as Error).message);
       } finally {

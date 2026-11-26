@@ -8,6 +8,8 @@ let created = 0;
 vi.mock('../api/client.ts', () => ({
   apiFetch: vi.fn(async (path: string) => {
     if (path === '/api/v1/uploads?active=true') return { items: [] };
+    if (path.startsWith('/api/v1/uploads/upload-'))
+      return { upload: { id: path.split('/').at(-1), status: 'COMPLETED' } };
     return { upload: { id: `upload-${++created}`, status: 'CREATED', size: 5 } };
   }),
   fetchCsrfToken: vi.fn().mockResolvedValue('csrf'),
