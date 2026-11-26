@@ -1,7 +1,7 @@
 import { createReadStream } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { DeleteObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { pool, s3 } from '../../platform/clients.ts';
 import { config } from '../../platform/config.ts';
 import { normalizeName } from './validation.ts';
@@ -10,6 +10,7 @@ import { cleanupCancellation } from './cancel.ts';
 import { verifyTemp } from './verify.ts';
 import { acquire } from './process-acquire.ts';
 import { complete, fail } from './process-finalize.ts';
+import { discardObject } from './attempts.ts';
 export async function renew(id: string, attemptId: string): Promise<boolean> {
   const result = await pool.query(
     `UPDATE "Upload" SET "leaseUntil" = now() + interval '60 seconds'
@@ -55,13 +56,15 @@ export async function processUpload(
       new PutObjectCommand({
         Bucket: config.bucket,
         Key: objectKey,
+        IfNoneMatch: '*',
         Body: createReadStream(join(config.tempDir, job.tempKey!)),
         ContentLength: Number(job.receivedBytes),
         ContentType: normalizeName(job.name).mimeType,
       }),
     );
     if (leaseLost || !(await complete(job, attemptId, objectKey))) {
-      await s3.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: objectKey }));
+      const published = await discardObject(attemptId, objectKey);
+      if (published) return true;
       await pool.query(
         `UPDATE "Upload" SET "leaseUntil" = NULL WHERE id = $1
         AND "attemptId" = $2 AND status = 'CANCEL_REQUESTED'`,
@@ -85,7 +88,7 @@ export async function processUpload(
     );
     if (state.rows[0]?.status === 'CANCEL_REQUESTED') {
       try {
-        await s3.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: objectKey }));
+        await discardObject(attemptId, objectKey);
         await pool.query(
           `UPDATE "Upload" SET "leaseUntil" = NULL WHERE id = $1
           AND "attemptId" = $2 AND status = 'CANCEL_REQUESTED'`,
@@ -100,11 +103,13 @@ export async function processUpload(
     if (leaseLost) return false;
     let cleaned = true;
     try {
-      await s3.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: objectKey }));
+      await discardObject(attemptId, objectKey);
     } catch {
       cleaned = false;
     }
-    const unavailable = error instanceof AppError && error.code === 'RESOURCE_UNAVAILABLE';
+    const missingTemp = (error as { code?: string }).code === 'ENOENT';
+    const unavailable =
+      missingTemp || (error instanceof AppError && error.code === 'RESOURCE_UNAVAILABLE');
     if ((unavailable || job.attemptCount + 1 >= 3) && cleaned) {
       try {
         await rm(join(config.tempDir, job.tempKey!), { force: true });
@@ -112,7 +117,13 @@ export async function processUpload(
         cleaned = false;
       }
     }
-    await fail(job, attemptId, cleaned, unavailable);
+    await fail(
+      job,
+      attemptId,
+      cleaned,
+      unavailable,
+      missingTemp ? 'TEMP_MISSING' : unavailable ? 'DESTINATION_UNAVAILABLE' : 'PROCESSING_FAILED',
+    );
     return false;
   } finally {
     clearInterval(timer);
