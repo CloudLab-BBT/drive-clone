@@ -33,7 +33,7 @@ Las respuestas se fusionan de forma monotónica: `QUEUED` no reemplaza `PROCESSI
 
 Las muestras multimedia pequeñas se generaron con FFmpeg 7.1 y decodifican sin error. DOC/DOCX, PPT/PPTX, XLS/XLSX, ODT/ODS/ODP y PDF son documentos de muestra exportados por LibreOffice 26.8.2.2 y abiertos de nuevo mediante conversión a PDF. DNG es una imagen TIFF Bayer de 16×16 con metadatos DNG reconocidos por ExifTool; RAW mantiene deliberadamente un fixture opaco. Todos los bytes de las 26 muestras completaron la carga, procesamiento en worker, almacenamiento S3 y descarga sin cambios.
 
-**Revisión probada:** rama `feat/o09-carga-multiple-drag-drop`, HEAD base `c8d250f7338a1f584c6af3ccd345ed76c40fc5b1`. Las pruebas cubrieron ese HEAD más los cambios locales; todavía no hay un commit nuevo que contenga este parche.
+**Commit validado:** [`049e1a7`](https://github.com/CloudLab-BBT/drive-clone/commit/049e1a79c9e17b3066ce9110dff6aab488dd8d8b) en `feat/o09-carga-multiple-drag-drop`.
 
 **Comandos y resultados:**
 
@@ -45,5 +45,6 @@ Las muestras multimedia pequeñas se generaron con FFmpeg 7.1 y decodifican sin 
 | `npm run test:integration` dentro del script aislado                                                                                                     | 18 archivos y 41 pruebas aprobadas (8 omitidas); 14 archivos y 34 pruebas aprobadas (15 omitidas) en el grupo de fallos. Incluye round-trip byte a byte de los 26 formatos, rechazo de MIME/extensión engañosos, pruebas de polling/cuotas, PUT monotónico y HTTP `415 UNSUPPORTED_FORMAT` para ZIP cifrado y ratio `>100:1`. |
 | Gitleaks v8.24.2: `git` y `dir` con `--redact --config=/repo/.gitleaks.toml`                                                                             | 0 hallazgos en historial (35 commits, 3.65 MB) y árbol de trabajo (2.37 MB).                                                                                                                                                                                                                                                  |
 | FFmpeg 7.1 y ExifTool                                                                                                                                    | Decodificación de fixtures de imagen/audio/video correcta; DNG validado sin advertencias.                                                                                                                                                                                                                                     |
+| [GitHub Actions run 45858170884](https://github.com/CloudLab-BBT/drive-clone/actions/runs/45858170884), commit `049e1a7`                                 | Correcto: los cinco controles `quality`, `unit`, `integration`, `build-and-scan` y `localstack-pro` finalizaron con `success`.                                                                                                                                                                                                |
 
-El escaneo de árbol se realizó con el subcomando `gitleaks dir`, que no recorre historial Git. Queda pendiente el resultado de CI remoto tras actualizar la PR.
+El escaneo de árbol se realizó con el subcomando `gitleaks dir`, que no recorre historial Git.
