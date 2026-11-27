@@ -1,8 +1,9 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
     environment: 'node',
+    exclude: [...configDefaults.exclude, 'e2e/**', 'reports/**'],
     coverage: {
       provider: 'v8',
       reportsDirectory: 'reports/coverage',
@@ -13,7 +14,13 @@ export default defineConfig({
         'apps/web/src/**/*.{ts,tsx}',
         'packages/contracts/src/**/*.ts',
       ],
-      exclude: ['**/*.test.*', '**/*.integration.test.*', 'apps/server/src/generated/**'],
+      exclude: [
+        '**/*.test.*',
+        '**/*.integration.test.*',
+        'apps/server/src/generated/**',
+        'e2e/**',
+        'reports/**',
+      ],
     },
   },
 });
