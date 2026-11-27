@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Message } from '@aws-sdk/client-sqs';
 import { pool } from '../../platform/clients.ts';
 
-export function parseUpload(body: string): string | null {
+export function parseWork(body: string): { id: string; type: 'UPLOAD' | 'DELETE' } | null {
   try {
     const value: unknown = JSON.parse(body);
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -10,12 +10,12 @@ export function parseUpload(body: string): string | null {
     if (
       Object.keys(record).sort().join(',') !== 'id,type,version' ||
       record.version !== 1 ||
-      record.type !== 'UPLOAD' ||
+      (record.type !== 'UPLOAD' && record.type !== 'DELETE') ||
       typeof record.id !== 'string' ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(record.id)
     )
       return null;
-    return record.id;
+    return { id: record.id, type: record.type };
   } catch {
     return null;
   }

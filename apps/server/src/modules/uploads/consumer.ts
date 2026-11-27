@@ -7,7 +7,8 @@ import {
 import { sqs } from '../../platform/clients.ts';
 import { config } from '../../platform/config.ts';
 import { processUpload } from './process.ts';
-import { observe, parseUpload } from './queue-observation.ts';
+import { processDeletion } from '../deletions/worker.ts';
+import { observe, parseWork } from './queue-observation.ts';
 
 let queueUrl: string | undefined;
 async function url() {
@@ -28,12 +29,14 @@ export async function consumeQueue(): Promise<void> {
     }),
   );
   for (const message of response.Messages ?? []) {
-    const id = parseUpload(message.Body ?? '');
-    await observe(message, 'MAIN', id, id ? 'RECEIVED' : 'INVALID');
-    if (!id) continue;
+    const work = parseWork(message.Body ?? '');
+    const uploadId = work?.type === 'UPLOAD' ? work.id : null;
+    await observe(message, 'MAIN', uploadId, work ? 'RECEIVED' : 'INVALID');
+    if (!work) continue;
+    const process = work.type === 'DELETE' ? processDeletion : processUpload;
     let acknowledged = false;
     try {
-      acknowledged = await processUpload(id, async () => {
+      acknowledged = await process(work.id, async () => {
         await sqs.send(
           new ChangeMessageVisibilityCommand({
             QueueUrl: await url(),
@@ -49,7 +52,7 @@ export async function consumeQueue(): Promise<void> {
       await sqs.send(
         new DeleteMessageCommand({ QueueUrl: await url(), ReceiptHandle: message.ReceiptHandle }),
       );
-      await observe(message, 'MAIN', id, 'ACKED');
-    } else await observe(message, 'MAIN', id, 'RETRY');
+      await observe(message, 'MAIN', uploadId, 'ACKED');
+    } else await observe(message, 'MAIN', uploadId, 'RETRY');
   }
 }

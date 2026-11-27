@@ -119,4 +119,6 @@ docker run --rm --network "$network" -v "$PWD:/app" -w /app \
   -e DATABASE_URL="postgresql://drive:drive-ci-password@${database}:5432/drive" \
   -e SESSION_SECRET=drive-ci-session-secret-at-least-32-characters \
   -e CORS_ORIGIN=http://127.0.0.1:8080 -e AWS_ENDPOINT=http://localstack:4566 \
-  -e RUN_UPLOAD_FAILURES=true node:24.21.0-bookworm-slim npm run test:integration
+  -e RUN_UPLOAD_FAILURES=true node:24.21.0-bookworm-slim sh -c \
+  'npm run test:integration &&
+   RUN_DELETION_INTEGRATION=true npx vitest run --config vitest.integration.config.ts --maxWorkers=1 apps/server/src/modules/deletions'

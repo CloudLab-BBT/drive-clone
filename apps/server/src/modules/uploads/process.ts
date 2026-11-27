@@ -36,18 +36,23 @@ export async function processUpload(
   }
   const { job, attemptId, objectKey } = acquired;
   let leaseLost = false;
+  const transfer = new AbortController();
+  const loseLease = () => {
+    leaseLost = true;
+    transfer.abort();
+  };
   let completed = false;
   const timer = setInterval(() => {
     void renew(id, attemptId)
       .then(async (ok) => {
         if (!ok) {
-          leaseLost = true;
+          loseLease();
           return;
         }
         await renewVisibility?.();
       })
       .catch(() => {
-        leaseLost = true;
+        loseLease();
       });
   }, 20_000);
   try {
@@ -61,6 +66,7 @@ export async function processUpload(
         ContentLength: Number(job.receivedBytes),
         ContentType: normalizeName(job.name).mimeType,
       }),
+      { abortSignal: transfer.signal },
     );
     if (leaseLost || !(await complete(job, attemptId, objectKey))) {
       const published = await discardObject(attemptId, objectKey);

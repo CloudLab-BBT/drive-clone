@@ -13,13 +13,22 @@ async function url() {
 }
 
 export async function enqueueUpload(client: PoolClient, id: string, availableAt?: Date) {
+  await enqueueWork(client, 'UPLOAD', id, availableAt);
+}
+
+export async function enqueueWork(
+  client: PoolClient,
+  type: 'UPLOAD' | 'DELETE',
+  id: string,
+  availableAt?: Date,
+) {
   await client.query(
     `INSERT INTO "Outbox" (id,"entityId",type,version,payload,"availableAt")
-     VALUES ($1,$2,'UPLOAD',1,$3,COALESCE($4,clock_timestamp()))
+     VALUES ($1,$2,$3,1,$4,COALESCE($5,clock_timestamp()))
      ON CONFLICT (type,"entityId",version) DO UPDATE SET
        "publishedAt" = NULL, "availableAt" = EXCLUDED."availableAt",
        "attemptId" = NULL, "leaseUntil" = NULL, "errorCode" = NULL`,
-    [randomUUID(), id, JSON.stringify({ version: 1, type: 'UPLOAD', id }), availableAt ?? null],
+    [randomUUID(), id, type, JSON.stringify({ version: 1, type, id }), availableAt ?? null],
   );
 }
 

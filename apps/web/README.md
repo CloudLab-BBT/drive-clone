@@ -29,3 +29,16 @@
   cliente HTTP con sesión y CSRF. Informa si queda un permiso heredado.
 - `ShareAction.test.tsx` verifica la apertura por teclado, el cambio de
   permiso y el aviso al revocar una concesión con acceso heredado.
+
+## Edición y eliminación
+
+- `ResourceRow` muestra un recurso del listado y conecta sus acciones de
+  navegación, descarga, compartición y edición.
+- `ResourceEditActions` recibe el recurso y callbacks para actualizar el
+  listado y seguir el borrado. Presenta las acciones con permiso OWNER o EDIT.
+- `EditDialog` valida el flujo de confirmación, informa del impacto visible
+  y envía el renombrado o borrado a la API. Muestra errores del servidor.
+- `DeletionNotice` recibe el trabajo aceptado y el nombre visible del recurso.
+  Consulta el progreso hasta confirmar la limpieza o detectar un fallo.
+- `ResourceEditActions.test.tsx` comprueba el aviso al editor y que la solicitud
+  de eliminación solo se envía tras confirmar.
