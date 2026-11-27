@@ -3,6 +3,7 @@ import { useFilePage, type Resource } from './useFilePage.ts';
 import { FolderForm } from './FolderForm.tsx';
 import { UploadWidget } from './UploadWidget.tsx';
 import { download } from './downloadFile.ts';
+import { ShareAction } from './ShareAction.tsx';
 import './FileList.css';
 
 interface Location {
@@ -41,7 +42,7 @@ export function FileList({
       <h2 tabIndex={-1} ref={heading}>
         {title}
       </h2>
-      {manageFolders && folderId && (
+      {folderId && (
         <>
           <nav className="folder-location" aria-label="Ubicación actual">
             {path.map((location, index) =>
@@ -64,8 +65,12 @@ export function FileList({
               ),
             )}
           </nav>
-          <FolderForm key={folderId} parentId={folderId} onCreated={refresh} />
-          <UploadWidget parentId={folderId} onCompleted={refresh} />
+          {manageFolders && (
+            <>
+              <FolderForm key={folderId} parentId={folderId} onCreated={refresh} />
+              <UploadWidget parentId={folderId} onCompleted={refresh} />
+            </>
+          )}
         </>
       )}
       {path.length > (rootId ? 1 : 0) && (
@@ -115,6 +120,9 @@ export function FileList({
               >
                 Abrir {item.name}
               </button>
+            )}
+            {manageFolders && item.effectivePermission === 'OWNER' && (
+              <ShareAction resource={item} />
             )}
           </li>
         ))}

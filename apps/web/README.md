@@ -18,3 +18,14 @@
   descarga con la sesión vigente.
 - `folder-navigation.test.tsx` comprueba navegación, creación y destino de la carga
   en la interfaz, con respuestas simuladas.
+
+## Compartición de recursos
+
+- `ShareAction({ resource })` abre el diálogo de concesiones para el recurso
+  propio identificado por su ID y nombre. Usa el foco y cierre del diálogo
+  nativo y devuelve el foco al botón al cerrar.
+- `useShares(resourceId)` obtiene las concesiones directas y devuelve los
+  estados del panel y las acciones de guardar, revocar y paginar. Usa el
+  cliente HTTP con sesión y CSRF. Informa si queda un permiso heredado.
+- `ShareAction.test.tsx` verifica la apertura por teclado, el cambio de
+  permiso y el aviso al revocar una concesión con acceso heredado.
