@@ -3,7 +3,13 @@ import { normalizeName } from './validation.ts';
 import { AuthorizationService } from '../authorization/service.ts';
 import { AppError } from '../identity/errors.ts';
 import type { Job } from './process-acquire.ts';
-export async function complete(job: Job, attemptId: string, objectKey: string): Promise<boolean> {
+import { enqueueUpload } from './outbox.ts';
+export async function complete(
+  job: Job,
+  attemptId: string,
+  objectKey: string,
+  recoverExpired = false,
+): Promise<boolean> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -22,11 +28,22 @@ export async function complete(job: Job, attemptId: string, objectKey: string): 
       action: 'CREATE_CHILD',
     });
     if (!access.allowed) throw new AppError('RESOURCE_UNAVAILABLE', 'Carpeta no disponible', 404);
+    const attempt = await client.query(
+      `UPDATE "UploadAttempt" SET status = 'PUBLISHED',
+      "updatedAt" = now() WHERE id = $1 AND status = 'WRITING' RETURNING id`,
+      [attemptId],
+    );
+    if (!attempt.rowCount) {
+      await client.query('ROLLBACK');
+      return false;
+    }
     const result = await client.query(
       `UPDATE "Upload" SET status = 'COMPLETED', "leaseUntil" = NULL,
+      "cleanupPending" = true,
       "updatedAt" = now() WHERE id = $1 AND "attemptId" = $2 AND status = 'PROCESSING'
-      AND "leaseUntil" > now() RETURNING id`,
-      [job.id, attemptId],
+      AND (CASE WHEN $3 THEN "leaseUntil" <= clock_timestamp()
+        ELSE "leaseUntil" > clock_timestamp() END) RETURNING id`,
+      [job.id, attemptId, recoverExpired],
     );
     if (!result.rowCount) {
       await client.query('ROLLBACK');
@@ -47,10 +64,6 @@ export async function complete(job: Job, attemptId: string, objectKey: string): 
       "usedBytes" = "usedBytes" + $2 WHERE id = $1`,
       [job.userId, job.expectedSize],
     );
-    await client.query(
-      `UPDATE "UploadAttempt" SET status = 'PUBLISHED', "updatedAt" = now() WHERE id = $1`,
-      [attemptId],
-    );
     await client.query('COMMIT');
     return true;
   } catch (error) {
@@ -60,22 +73,38 @@ export async function complete(job: Job, attemptId: string, objectKey: string): 
     client.release();
   }
 }
-export async function fail(job: Job, attemptId: string, cleaned: boolean, unavailable = false) {
+export async function fail(
+  job: Job,
+  attemptId: string,
+  cleaned: boolean,
+  unavailable = false,
+  failureCode = 'PROCESSING_FAILED',
+) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     await client.query('SELECT id FROM "User" WHERE id = $1 FOR UPDATE', [job.userId]);
     const terminal = unavailable || job.attemptCount + 1 >= 3;
-    const result = await client.query(
+    const delay = job.attemptCount === 0 ? 5 : 20;
+    const residues = await client.query(
+      `SELECT id FROM "UploadAttempt"
+      WHERE "uploadId" = $1 AND status = 'DISCARDED' LIMIT 1`,
+      [job.id],
+    );
+    const fullyCleaned = cleaned && !residues.rowCount;
+    const result = await client.query<{ nextAttemptAt: Date | null }>(
       `UPDATE "Upload" SET status = $3, "attemptId" = NULL,
-      "leaseUntil" = NULL, "nextAttemptAt" = CASE WHEN $4 THEN NULL ELSE now() + interval '30 seconds' END,
+      "leaseUntil" = NULL, "nextAttemptAt" = CASE WHEN $4 THEN NULL
+        ELSE now() + ($6::int * interval '1 second') END,
       "errorCode" = CASE WHEN $4 THEN 'PROCESSING_FAILED' ELSE NULL END,
       "cleanupPending" = NOT $5,
       "updatedAt" = now() WHERE id = $1 AND "attemptId" = $2 AND status = 'PROCESSING'
-      RETURNING id`,
-      [job.id, attemptId, terminal ? 'FAILED' : 'QUEUED', terminal, cleaned],
+      RETURNING "nextAttemptAt"`,
+      [job.id, attemptId, terminal ? 'FAILED' : 'QUEUED', terminal, fullyCleaned, delay],
     );
-    if (terminal && cleaned && result.rowCount) {
+    if (!terminal && result.rowCount)
+      await enqueueUpload(client, job.id, result.rows[0].nextAttemptAt!);
+    if (terminal && fullyCleaned && result.rowCount) {
       await client.query('DELETE FROM "Resource" WHERE id = $1 AND status = $2', [
         job.resourceId,
         'RESERVED',
@@ -87,8 +116,9 @@ export async function fail(job: Job, attemptId: string, cleaned: boolean, unavai
       );
     }
     await client.query(
-      `UPDATE "UploadAttempt" SET status = 'DISCARDED', "updatedAt" = now() WHERE id = $1`,
-      [attemptId],
+      `UPDATE "UploadAttempt" SET status = 'DISCARDED', "failureCode" = $2,
+        "updatedAt" = now() WHERE id = $1 AND status = 'WRITING'`,
+      [attemptId, failureCode],
     );
     await client.query('COMMIT');
   } catch (error) {

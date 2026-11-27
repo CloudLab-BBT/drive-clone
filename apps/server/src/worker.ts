@@ -2,7 +2,13 @@ import Fastify from 'fastify';
 import { requireConfig } from './platform/config.ts';
 import { readiness } from './platform/health.ts';
 import { closeClients } from './platform/clients.ts';
-import { consumeQueue, publishOutbox, reconcileExpired } from './modules/uploads/queue.ts';
+import {
+  consumeQueue,
+  publishOutbox,
+  reconcileExpired,
+  reconcileDlq,
+} from './modules/uploads/queue.ts';
+import { verifyPublishedObjects } from './modules/uploads/published-audit.ts';
 
 requireConfig();
 const app = Fastify({ logger: true });
@@ -14,12 +20,19 @@ app.get('/health/ready', async (_request, reply) => {
 });
 app.get('/internal/health/diagnostics', async () => readiness());
 let running = true;
-process.on('SIGTERM', () => { running = false; void app.close().then(closeClients); });
+process.on('SIGTERM', () => {
+  running = false;
+  void app.close().then(closeClients);
+});
 await app.listen({ host: '0.0.0.0', port: 3001 });
 
 async function loop(operation: () => Promise<void>, delay: number) {
   while (running) {
-    try { await operation(); } catch (error) { app.log.error(error); }
+    try {
+      await operation();
+    } catch (error) {
+      app.log.error(error);
+    }
     if (running) await new Promise((resolve) => setTimeout(resolve, delay));
   }
 }
@@ -27,3 +40,8 @@ async function loop(operation: () => Promise<void>, delay: number) {
 void loop(publishOutbox, 1000);
 void loop(consumeQueue, 0);
 void loop(reconcileExpired, 20_000);
+void loop(reconcileDlq, 1000);
+void loop(
+  () => verifyPublishedObjects((resourceId) => app.log.error({ resourceId }, 'OBJECT_MISSING')),
+  3_600_000,
+);

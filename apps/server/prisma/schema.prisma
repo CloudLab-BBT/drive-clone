@@ -105,6 +105,7 @@ model UploadAttempt {
   uploadId  String   @db.Uuid
   objectKey String   @unique
   status    String
+  failureCode String?
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
   upload    Upload   @relation(fields: [uploadId], references: [id])
@@ -146,5 +147,18 @@ model Outbox {
   errorCode       String?
   createdAt       DateTime  @default(now()) @db.Timestamptz(6)
   @@unique([type, entityId, version])
+  @@index([type, entityId, publishedAt])
   @@index([availableAt, createdAt, id])
+}
+
+model QueueObservation {
+  id           String   @id @default(uuid()) @db.Uuid
+  messageId    String
+  uploadId     String?  @db.Uuid
+  source       String
+  receiveCount Int
+  outcome      String
+  observedAt   DateTime @default(now()) @db.Timestamptz(6)
+  @@unique([source, messageId, receiveCount])
+  @@index([uploadId, observedAt])
 }
