@@ -69,6 +69,10 @@ export const SharedResource = Type.Union(
   ],
   { description: 'Entrada compartida directa; omite la ubicación y los ancestros privados.' },
 );
+export const EditResourceResponse = Type.Object(
+  { resource: Type.Union([Resource, SharedResource]) },
+  { additionalProperties: false },
+);
 export const SharedResourcePage = Type.Object(
   { items: Type.Array(SharedResource), nextCursor: Type.Union([Type.String(), Type.Null()]) },
   { additionalProperties: false },

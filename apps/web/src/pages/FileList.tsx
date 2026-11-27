@@ -3,7 +3,8 @@ import { useFilePage, type Resource } from './useFilePage.ts';
 import { FolderForm } from './FolderForm.tsx';
 import { UploadWidget } from './UploadWidget.tsx';
 import { download } from './downloadFile.ts';
-import { ShareAction } from './ShareAction.tsx';
+import { ResourceRow } from './ResourceRow.tsx';
+import { DeletionNotice, type Deletion } from './DeletionNotice.tsx';
 import './FileList.css';
 
 interface Location {
@@ -26,6 +27,11 @@ export function FileList({
 
   const { items, cursor, loading, error, setError, invalidate, refresh, more } =
     useFilePage(endpoint);
+  const [deletions, setDeletions] = useState<{ job: Deletion; name: string }[]>([]);
+  function track(job: Deletion, name: string) {
+    setDeletions((current) => [...current.filter((item) => item.job.id !== job.id), { job, name }]);
+    refresh();
+  }
   const heading = useRef<HTMLHeadingElement>(null);
 
   async function save(file: Resource) {
@@ -91,40 +97,35 @@ export function FileList({
       {loading && items.length === 0 && <p role="status">Cargando archivos…</p>}
       {!loading && items.length === 0 && !error && <p>No hay archivos disponibles.</p>}
       {error && <p role="alert">{error}</p>}
+      {deletions.length > 0 && (
+        <ul aria-label="Eliminaciones solicitadas">
+          {deletions.map(({ job, name }) => (
+            <DeletionNotice
+              key={job.id}
+              initial={job}
+              name={name}
+              dismiss={() =>
+                setDeletions((items) => items.filter((item) => item.job.id !== job.id))
+              }
+            />
+          ))}
+        </ul>
+      )}
       <ul className="file-list">
         {items.map((item) => (
-          <li key={item.id}>
-            <span>
-              {item.kind === 'FOLDER' ? '📁' : '📄'} {item.name}
-            </span>
-            {item.kind === 'FILE' ? (
-              <>
-                <span>{item.size?.toLocaleString('es-CL')} bytes · Disponible</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void save(item);
-                  }}
-                >
-                  Descargar {item.name}
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  invalidate();
-                  heading.current?.focus();
-                  setPath((current) => [...current, { id: item.id, name: item.name }]);
-                }}
-              >
-                Abrir {item.name}
-              </button>
-            )}
-            {manageFolders && item.effectivePermission === 'OWNER' && (
-              <ShareAction resource={item} />
-            )}
-          </li>
+          <ResourceRow
+            key={item.id}
+            item={item}
+            ownList={manageFolders}
+            open={() => {
+              invalidate();
+              heading.current?.focus();
+              setPath((current) => [...current, { id: item.id, name: item.name }]);
+            }}
+            save={() => void save(item)}
+            refresh={refresh}
+            track={track}
+          />
         ))}
       </ul>
       {cursor && (

@@ -15,6 +15,7 @@ import './modules/identity/auth-types.ts';
 import { setAppErrorHandler } from './platform/error-handler.ts';
 import { AppError } from './modules/identity/errors.ts';
 import { registerUploadRoutes } from './modules/uploads/routes.ts';
+import { registerEditRoutes } from './modules/editing/routes.ts';
 import { registerShareRoutes } from './modules/sharing/routes.ts';
 import { registerFolderRoutes } from './modules/folders/routes.ts';
 import { registerFileRoutes } from './modules/files/routes.ts';
@@ -130,6 +131,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
 
   await app.register(registerUploadRoutes, { prefix: '/api/v1' });
+  await app.register(registerEditRoutes, { prefix: '/api/v1' });
   await app.register(registerShareRoutes, { prefix: '/api/v1' });
   await app.register(registerFolderRoutes, { prefix: '/api/v1' });
   await app.register(registerFileRoutes, { prefix: '/api/v1' });

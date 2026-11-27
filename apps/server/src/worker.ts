@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import { wakeDeletions } from './modules/deletions/jobs.ts';
 import { requireConfig } from './platform/config.ts';
 import { readiness } from './platform/health.ts';
 import { closeClients } from './platform/clients.ts';
@@ -45,3 +46,5 @@ void loop(
   () => verifyPublishedObjects((resourceId) => app.log.error({ resourceId }, 'OBJECT_MISSING')),
   3_600_000,
 );
+
+void loop(wakeDeletions, 5000);

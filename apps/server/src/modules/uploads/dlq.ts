@@ -6,7 +6,8 @@ import {
 import { pool, sqs } from '../../platform/clients.ts';
 import { config } from '../../platform/config.ts';
 import { wakeQueued } from './outbox.ts';
-import { observe, parseUpload } from './queue-observation.ts';
+import { wakeDeletions } from '../deletions/jobs.ts';
+import { observe, parseWork } from './queue-observation.ts';
 
 let dlqUrl: string | undefined;
 async function url() {
@@ -27,9 +28,13 @@ export async function reconcileDlq(): Promise<void> {
     }),
   );
   for (const message of response.Messages ?? []) {
-    const id = parseUpload(message.Body ?? '');
+    const work = parseWork(message.Body ?? '');
+    const id = work?.type === 'UPLOAD' ? work.id : null;
     let outcome = 'INVALID';
-    if (id) {
+    if (work?.type === 'DELETE') {
+      await wakeDeletions();
+      outcome = 'DEFERRED';
+    } else if (id) {
       const state = await pool.query<{ status: string }>(
         'SELECT status FROM "Upload" WHERE id = $1',
         [id],
