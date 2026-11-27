@@ -3,8 +3,11 @@
 ## Entorno y versión
 
 Rama `feat/o13-recuperacion-cargas`, basada en `origin/main` en
-`a64f4340ad0cfab77fadbdf934175ae175338075`. Trabajo sin commit: las
-pruebas se ejecutaron sobre los archivos de esta rama. Docker Compose se levantó
+`a64f4340ad0cfab77fadbdf934175ae175338075`. La revisión de la PR #14 parte
+del commit `5b462fa`. Las pruebas de las correcciones se ejecutaron sobre los
+archivos de trabajo antes del nuevo commit; se repetirán después de que el
+autor haga commit y push para vincular el resultado al SHA publicado.
+Docker Compose se levantó
 con el proyecto aislado `drive-clone-o13` (PostgreSQL, LocalStack, inicialización
 de temporales, migraciones y bootstrap). Se reconstruyó la imagen `api` antes de
 la ejecución final. No se arrancó el trabajador durante las suites de fallos para
@@ -14,6 +17,8 @@ evitar consumidores ajenos a cada caso.
 
 ```sh
 docker compose -p drive-clone-o13 build api
+docker compose -p drive-clone-o13 build migrate
+docker compose -p drive-clone-o13 run --rm migrate
 docker compose -p drive-clone-o13 run --rm -e RUN_O13_INTEGRATION=true api npx vitest run \
   src/modules/uploads/recovery.integration.test.ts \
   src/modules/uploads/recovery-race.integration.test.ts \
@@ -23,10 +28,12 @@ docker compose -p drive-clone-o13 run --rm -e RUN_O13_INTEGRATION=true api npx v
   src/modules/uploads/recovery-cleanup.integration.test.ts \
   src/modules/uploads/recovery-object.integration.test.ts \
   src/modules/uploads/recovery-history.integration.test.ts \
-  src/modules/uploads/recovery-sql.integration.test.ts --silent
+  src/modules/uploads/recovery-sql.integration.test.ts \
+  src/modules/uploads/recovery-review.integration.test.ts --silent --maxWorkers=1
 ```
 
-Resultado final: **9 suites, 22 pruebas aprobadas, 0 fallidas, 0 omitidas**.
+Resultado preliminar de la revisión: **10 suites, 25 pruebas aprobadas, 0
+fallidas, 0 omitidas**. Las 22 pruebas originales siguen incluidas.
 Cubren adquisición concurrente, duplicados SQS, caída de Outbox, mensajes
 perdidos, consumidor tardío, objeto S3 válido o corrupto tras caída SQL,
 indisponibilidad S3, destino ausente o en eliminación, DLQ, lease vencido,
@@ -34,6 +41,16 @@ temporal ausente, cancelación durante reintento, limpieza fallida, retención y
 la independencia de los ciclos del trabajador. Una ejecución previa en la misma
 base poblada dejó fuera del primer lote un caso nuevo; la prueba ahora sitúa su
 lease antes de los demás y pasó sobre esa base poblada.
+
+Las tres pruebas nuevas comprueban que `COMPLETED` conserva la limpieza pendiente
+tras una caída, que un lease vencido durante una espera por bloqueo impide
+publicar, y que un objeto publicado ausente cambia a `UNAVAILABLE` con alerta.
+La prueba de Outbox comprueba que la reactivación conserva el mismo ID y que el
+índice único existe. La migración correctiva se aplicó sobre la base existente.
+La primera repetición paralela tuvo tres tiempos de espera: una prueba de fallo
+SQL instala temporalmente un disparador sobre `Resource` y la nueva prueba de
+lease mantiene un bloqueo intencional. Con `--maxWorkers=1`, las 25 pruebas
+pasaron sin fallos ni omisiones.
 
 ## Regresiones y extremo a extremo
 
@@ -57,7 +74,8 @@ se eliminaron.
 PostgreSQL y LocalStack disponibles. Se normalizaron los finales de línea de
 `scripts/*.sh` de la copia porque el montaje Windows entregaba CRLF a `sh`.
 El comando final dentro de esa copia fue `cd /tmp/o13check && npm run check`.
-Resultado: **32 suites aprobadas, 21 omitidas; 109 pruebas aprobadas, 45
+Resultado tras la revisión: **32 suites aprobadas, 22 omitidas; 109 pruebas
+aprobadas, 48
 omitidas; salida 0**. Las suites de integración condicionadas por variables de
 entorno se ejecutaron por separado arriba. Se comprobaron también `build`,
 `git diff --check` y los límites de 150 líneas de los archivos de código.

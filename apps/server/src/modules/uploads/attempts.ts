@@ -42,10 +42,12 @@ export async function cleanupDiscarded(): Promise<void> {
   }
 }
 
-export async function cleanupCompleted(): Promise<void> {
+export async function cleanupCompleted(id?: string): Promise<void> {
   const rows = await pool.query<{ id: string; tempKey: string | null }>(
     `SELECT id,"tempKey" FROM "Upload" WHERE status = 'COMPLETED'
-      AND "cleanupPending" = true ORDER BY "updatedAt" LIMIT 20`,
+      AND "cleanupPending" = true AND ($1::uuid IS NULL OR id = $1)
+      ORDER BY "updatedAt" LIMIT 20`,
+    [id ?? null],
   );
   for (const row of rows.rows) {
     try {

@@ -39,8 +39,10 @@ export async function complete(
     }
     const result = await client.query(
       `UPDATE "Upload" SET status = 'COMPLETED', "leaseUntil" = NULL,
+      "cleanupPending" = true,
       "updatedAt" = now() WHERE id = $1 AND "attemptId" = $2 AND status = 'PROCESSING'
-      AND (CASE WHEN $3 THEN "leaseUntil" <= now() ELSE "leaseUntil" > now() END) RETURNING id`,
+      AND (CASE WHEN $3 THEN "leaseUntil" <= clock_timestamp()
+        ELSE "leaseUntil" > clock_timestamp() END) RETURNING id`,
       [job.id, attemptId, recoverExpired],
     );
     if (!result.rowCount) {

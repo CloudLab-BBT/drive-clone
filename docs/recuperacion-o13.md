@@ -5,6 +5,9 @@
 `Outbox` es la fuente persistente de trabajo `UPLOAD`. Se marca `publishedAt` solo
 después de la respuesta satisfactoria de SQS. Si SQS recibió el mensaje pero el
 proceso cayó antes de esa actualización, el publicador puede enviarlo otra vez.
+La restricción `UNIQUE(type, entityId, version)` conserva una fila por intención
+de despacho. Un reintento reactiva esa misma fila con `ON CONFLICT`, que toma el
+bloqueo de la fila, incluso si el mensaje previo se perdió después de publicarse.
 Los mensajes repetidos no crean otro recurso: la adquisición exige `QUEUED`, toma
 un bloqueo SQL y crea un `UploadAttempt` con UUID y clave S3 propia. El contador
 `attemptCount` aumenta solo en esa adquisición. `QueueObservation.receiveCount`
@@ -13,7 +16,9 @@ registra por separado las recepciones comunicadas por SQS.
 Un intento `PROCESSING` tiene `attemptId` y lease de 60 segundos, renovado cada
 20 segundos junto con la visibilidad del mensaje. Solo el intento vigente con
 lease válido puede pasar a `COMPLETED` y activar el recurso en la misma
-transacción. Cada escritura usa una clave distinta y `If-None-Match: *` para no
+transacción. La finalización compara el lease con `clock_timestamp()` después
+de adquirir los bloqueos, para que una espera no valide una hora anterior al
+vencimiento. Cada escritura usa una clave distinta y `If-None-Match: *` para no
 sobrescribir un objeto existente. Un consumidor antiguo descarta su propia clave
 si perdió el lease. Los mensajes se eliminan de SQS tras comprobar un estado
 terminal persistido; los demás se reentregan o tienen un nuevo evento Outbox.
@@ -53,6 +58,11 @@ en el mecanismo de O10; la cuota reservada se libera después de limpiar. La
 conciliación elimina observaciones SQS y eventos Outbox `UPLOAD` publicados con
 más de 30 días, en lotes de hasta 1000. Nunca elimina eventos sin publicar.
 `UploadAttempt` se conserva con su carga para diagnosticarla.
+
+La misma transacción que confirma `COMPLETED` marca `cleanupPending`; la limpieza
+del temporal lo desmarca solo después del borrado confirmado. Al iniciar, el
+trabajador comprueba los objetos de archivos `ACTIVE`. Un objeto ausente cambia
+el recurso a `UNAVAILABLE` y emite una alerta `OBJECT_MISSING` en su registro.
 
 Ante una carga detenida, consultar `Upload.status`, `attemptId`, `attemptCount`,
 `leaseUntil`, `nextAttemptAt`, `errorCode` y `cleanupPending`; consultar después

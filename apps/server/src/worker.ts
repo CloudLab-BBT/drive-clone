@@ -8,6 +8,7 @@ import {
   reconcileExpired,
   reconcileDlq,
 } from './modules/uploads/queue.ts';
+import { verifyPublishedObjects } from './modules/uploads/published-audit.ts';
 
 requireConfig();
 const app = Fastify({ logger: true });
@@ -40,3 +41,7 @@ void loop(publishOutbox, 1000);
 void loop(consumeQueue, 0);
 void loop(reconcileExpired, 20_000);
 void loop(reconcileDlq, 1000);
+void loop(
+  () => verifyPublishedObjects((resourceId) => app.log.error({ resourceId }, 'OBJECT_MISSING')),
+  3_600_000,
+);

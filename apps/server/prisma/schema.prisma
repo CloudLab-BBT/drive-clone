@@ -146,6 +146,7 @@ model Outbox {
   leaseUntil      DateTime? @db.Timestamptz(6)
   errorCode       String?
   createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  @@unique([type, entityId, version])
   @@index([type, entityId, publishedAt])
   @@index([availableAt, createdAt, id])
 }

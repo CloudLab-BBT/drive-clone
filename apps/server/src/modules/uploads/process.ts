@@ -10,7 +10,7 @@ import { cleanupCancellation } from './cancel.ts';
 import { verifyTemp } from './verify.ts';
 import { acquire } from './process-acquire.ts';
 import { complete, fail } from './process-finalize.ts';
-import { discardObject } from './attempts.ts';
+import { cleanupCompleted, discardObject } from './attempts.ts';
 export async function renew(id: string, attemptId: string): Promise<boolean> {
   const result = await pool.query(
     `UPDATE "Upload" SET "leaseUntil" = now() + interval '60 seconds'
@@ -74,11 +74,7 @@ export async function processUpload(
       return false;
     }
     completed = true;
-    try {
-      await rm(join(config.tempDir, job.tempKey!), { force: true });
-    } catch {
-      await pool.query('UPDATE "Upload" SET "cleanupPending" = true WHERE id = $1', [job.id]);
-    }
+    await cleanupCompleted(job.id);
     return true;
   } catch (error) {
     if (completed) return true;

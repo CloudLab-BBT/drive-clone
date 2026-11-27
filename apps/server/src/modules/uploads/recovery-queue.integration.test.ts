@@ -56,6 +56,10 @@ suite('Outbox, SQS y diagnóstico DLQ', () => {
 
   it('reconstruye Outbox si el mensaje enviado se pierde', async () => {
     const { upload } = await queued();
+    const original = await pool.query<{ id: string }>(
+      'SELECT id FROM "Outbox" WHERE "entityId" = $1',
+      [upload.id],
+    );
     await pool.query(
       `UPDATE "Outbox" SET "publishedAt" = now() - interval '61 seconds'
       WHERE "entityId" = $1`,
@@ -73,6 +77,12 @@ suite('Outbox, SQS y diagnóstico DLQ', () => {
       [upload.id],
     );
     expect(pending.rowCount).toBe(1);
+    expect(pending.rows[0].id).toBe(original.rows[0].id);
+    const constraint = await pool.query<{ exists: boolean }>(
+      `SELECT EXISTS(SELECT 1 FROM pg_indexes
+        WHERE indexname = 'Outbox_type_entityId_version_key') AS "exists"`,
+    );
+    expect(constraint.rows[0].exists).toBe(true);
   });
 
   it('distingue recepciones SQS del único intento de negocio', async () => {

@@ -1,10 +1,7 @@
-import { rm } from 'node:fs/promises';
-import { join } from 'node:path';
 import { pool } from '../../platform/clients.ts';
-import { config } from '../../platform/config.ts';
 import type { Job } from './process-acquire.ts';
 import { complete } from './process-finalize.ts';
-import { discardObject } from './attempts.ts';
+import { cleanupCompleted, discardObject } from './attempts.ts';
 import { verifyObject } from './object-verify.ts';
 import { releaseExpired } from './recovery-transition.ts';
 import { cleanupFailed } from './cancel.ts';
@@ -33,11 +30,7 @@ export async function recoverExpired(): Promise<void> {
     if (object === 'VALID') {
       try {
         if (await complete(row, row.attemptId, row.objectKey, true)) {
-          try {
-            if (row.tempKey) await rm(join(config.tempDir, row.tempKey), { force: true });
-          } catch {
-            await pool.query(`UPDATE "Upload" SET "cleanupPending" = true WHERE id = $1`, [row.id]);
-          }
+          await cleanupCompleted(row.id);
         } else {
           const current = await pool.query<{ status: string; attemptId: string | null }>(
             'SELECT status,"attemptId" FROM "Upload" WHERE id = $1',

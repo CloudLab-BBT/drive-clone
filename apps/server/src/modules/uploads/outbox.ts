@@ -15,7 +15,10 @@ async function url() {
 export async function enqueueUpload(client: PoolClient, id: string, availableAt?: Date) {
   await client.query(
     `INSERT INTO "Outbox" (id,"entityId",type,version,payload,"availableAt")
-     VALUES ($1,$2,'UPLOAD',1,$3,COALESCE($4,now()))`,
+     VALUES ($1,$2,'UPLOAD',1,$3,COALESCE($4,clock_timestamp()))
+     ON CONFLICT (type,"entityId",version) DO UPDATE SET
+       "publishedAt" = NULL, "availableAt" = EXCLUDED."availableAt",
+       "attemptId" = NULL, "leaseUntil" = NULL, "errorCode" = NULL`,
     [randomUUID(), id, JSON.stringify({ version: 1, type: 'UPLOAD', id }), availableAt ?? null],
   );
 }
