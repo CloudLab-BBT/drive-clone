@@ -1,15 +1,25 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext.tsx';
 import { useUploadBatch } from './useUploadBatch.ts';
 import './UploadWidget.css';
 
-export function UploadWidget() {
+export function UploadWidget({
+  parentId,
+  onCompleted,
+}: { parentId?: string; onCompleted?: () => void } = {}) {
   const { user } = useAuth();
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const { files, notice, addFiles, cancel } = useUploadBatch();
+  const completed = files.filter((file) => file.status === 'COMPLETED').length;
+  const previousCompleted = useRef(0);
+  useEffect(() => {
+    if (completed > previousCompleted.current) onCompleted?.();
+    previousCompleted.current = completed;
+  }, [completed, onCompleted]);
+
   function select(selection: FileList | null) {
-    if (selection && user) void addFiles(selection, user.rootId);
+    if (selection && user) void addFiles(selection, parentId ?? user.rootId);
     if (input.current) input.current.value = '';
   }
   function status(fileStatus: string) {

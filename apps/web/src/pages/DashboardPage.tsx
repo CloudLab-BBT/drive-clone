@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext.tsx';
-import { UploadWidget } from './UploadWidget.tsx';
 import { FileList } from './FileList.tsx';
 
 export const DashboardPage: React.FC = () => {
@@ -37,8 +36,7 @@ export const DashboardPage: React.FC = () => {
       </header>
 
       <section className="dashboard-content" aria-labelledby="section-info">
-        <UploadWidget />
-        {user && <FileList rootId={user.rootId} title="Mis archivos" />}
+        {user && <FileList rootId={user.rootId} title="Mis archivos" manageFolders />}
         <FileList title="Compartidos conmigo" />
         <h2 id="section-info">Información de la cuenta</h2>
         <div className="card">
@@ -49,7 +47,8 @@ export const DashboardPage: React.FC = () => {
             <strong>Identificador de raíz:</strong> <code>{user?.rootId}</code>
           </p>
           <p className="root-notice">
-            🔒 Tu carpeta raíz está protegida y aislada. No puede renombrarse, compartirse ni eliminarse.
+            🔒 Tu carpeta raíz está protegida y aislada. No puede renombrarse, compartirse ni
+            eliminarse.
           </p>
         </div>
       </section>

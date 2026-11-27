@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { AppError } from '../identity/errors.ts';
 import { normalizeName, validateSize } from './validation.ts';
-import { AuthorizationService } from '../authorization/service.ts';
+import { lockCreationParent } from '../resources/creation.ts';
 import type { UploadRow } from './store.ts';
 export async function createUpload(
   pool: Pool,
@@ -14,23 +14,7 @@ export async function createUpload(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('SELECT id FROM "User" WHERE id = $1 FOR UPDATE', [userId]);
-    const access = await new AuthorizationService(client).evaluate({
-      actorId: userId,
-      resourceId: input.parentId,
-      action: 'CREATE_CHILD',
-    });
-    if (!access.allowed)
-      throw new AppError(
-        access.visible ? 'FORBIDDEN' : 'RESOURCE_UNAVAILABLE',
-        'Carpeta no disponible',
-        access.visible ? 403 : 404,
-      );
-    const parent = await client.query(
-      'SELECT id FROM "Resource" WHERE id = $1 AND kind = $2 AND status = $3 FOR UPDATE',
-      [input.parentId, 'FOLDER', 'ACTIVE'],
-    );
-    if (!parent.rowCount) throw new AppError('RESOURCE_UNAVAILABLE', 'Carpeta no disponible', 404);
+    await lockCreationParent(client, userId, input.parentId);
     const quota = await client.query<{ reservedBytes: string; usedBytes: string }>(
       'SELECT "reservedBytes", "usedBytes" FROM "User" WHERE id = $1',
       [userId],

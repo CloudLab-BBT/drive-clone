@@ -15,6 +15,7 @@ import './modules/identity/auth-types.ts';
 import { setAppErrorHandler } from './platform/error-handler.ts';
 import { AppError } from './modules/identity/errors.ts';
 import { registerUploadRoutes } from './modules/uploads/routes.ts';
+import { registerFolderRoutes } from './modules/folders/routes.ts';
 import { registerFileRoutes } from './modules/files/routes.ts';
 
 export interface BuildAppOptions {
@@ -22,10 +23,12 @@ export interface BuildAppOptions {
   sessionSecret?: string;
   identityService?: IdentityService;
   readinessCheck?: () => Promise<{ ready: boolean; checks: Record<string, boolean> }>;
-  rateLimit?: boolean | {
-    login?: { max: number; timeWindow: number };
-    register?: { max: number; timeWindow: number };
-  };
+  rateLimit?:
+    | boolean
+    | {
+        login?: { max: number; timeWindow: number };
+        register?: { max: number; timeWindow: number };
+      };
 }
 
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
@@ -53,7 +56,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(fastifyCookie);
 
   // 2. CORS
-  const allowedOrigins = authConfig.corsOrigin.split(',').map((o) => o.trim()).filter(Boolean);
+  const allowedOrigins = authConfig.corsOrigin
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
   await app.register(fastifyCors, {
     origin: allowedOrigins,
     credentials: true,
@@ -65,7 +71,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     await app.register(fastifyRateLimit, {
       global: false,
       errorResponseBuilder: (_request, context) => {
-        const err = new AppError('RATE_LIMITED', 'Demasiadas solicitudes, intente más tarde', context.statusCode || 429);
+        const err = new AppError(
+          'RATE_LIMITED',
+          'Demasiadas solicitudes, intente más tarde',
+          context.statusCode || 429,
+        );
         return err;
       },
     });
@@ -119,6 +129,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
 
   await app.register(registerUploadRoutes, { prefix: '/api/v1' });
+  await app.register(registerFolderRoutes, { prefix: '/api/v1' });
   await app.register(registerFileRoutes, { prefix: '/api/v1' });
 
   return app;

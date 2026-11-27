@@ -1,6 +1,8 @@
 import { extname } from 'node:path';
 import { AppError, InvalidInputError } from '../identity/errors.ts';
 
+import { normalizeResourceName } from '../resources/name.ts';
+
 const formats: Record<string, string> = {
   png: 'image/png',
   jpg: 'image/jpeg',
@@ -35,20 +37,11 @@ export const MAX_UPLOADS_PER_USER = 10;
 export const MAX_USER_BYTES = 1024 ** 3;
 
 export function normalizeName(value: unknown): { name: string; nameKey: string; mimeType: string } {
-  if (typeof value !== 'string') throw new InvalidInputError('Nombre inválido');
-  const name = value.normalize('NFC').trim();
-  if (
-    !name ||
-    [...name].length > 120 ||
-    name === '.' ||
-    name === '..' ||
-    /[\p{Cc}\p{Cf}\\/]/u.test(name)
-  )
-    throw new InvalidInputError('Nombre inválido');
+  const { name, nameKey } = normalizeResourceName(value);
   const extension = extname(name).slice(1).toLowerCase();
   const mimeType = formats[extension];
   if (!mimeType) throw new AppError('UNSUPPORTED_FORMAT', 'Formato no admitido', 415);
-  return { name, nameKey: name.toLocaleLowerCase('und'), mimeType };
+  return { name, nameKey, mimeType };
 }
 
 export function validateSize(size: unknown): number {

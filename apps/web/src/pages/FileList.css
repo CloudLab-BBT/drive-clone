@@ -1,5 +1,12 @@
-.dashboard-content > .card { margin-top: 1rem; }
-.file-list { list-style: none; display: grid; gap: 0.65rem; margin: 1rem 0; }
+.dashboard-content > .card {
+  margin-top: 1rem;
+}
+.file-list {
+  list-style: none;
+  display: grid;
+  gap: 0.65rem;
+  margin: 1rem 0;
+}
 .file-list li {
   display: flex;
   align-items: center;
@@ -9,13 +16,40 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
 }
-.file-list li span:first-child { flex: 1 1 12rem; overflow-wrap: anywhere; }
-.file-list li span:nth-child(2) { color: var(--color-text-muted); }
-.file-list button, .dashboard-content .card > button {
+.file-list li span:first-child {
+  flex: 1 1 12rem;
+  overflow-wrap: anywhere;
+}
+.file-list li span:nth-child(2) {
+  color: var(--color-text-muted);
+}
+.file-list button,
+.dashboard-content .card > button {
   padding: 0.4rem 0.7rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
   cursor: pointer;
 }
-.dashboard-content .card > button { margin: 0.5rem 0.5rem 0 0; }
+.dashboard-content .card > button {
+  margin: 0.5rem 0.5rem 0 0;
+}
+
+.folder-location,
+.folder-create {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 0.75rem 0;
+}
+
+.folder-location span {
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.folder-create label {
+  display: grid;
+  gap: 0.25rem;
+}
