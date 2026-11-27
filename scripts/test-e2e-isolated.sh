@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 set -eu
 
 # Load stack provisioning helper (defines variables and cleanup function)
@@ -51,23 +51,26 @@ docker run --rm --network "$network" -v "$PWD:/app" -w /app \
   node:24.21.0-bookworm-slim npm run bootstrap -w @drive-clone/server
 
 # Start API server
+docker volume create "$temp_vol" > /dev/null
 docker run -d --name "$api" --network "$network" --network-alias api \
   -v "$PWD:/app" -w /app \
+  -v "${temp_vol}:/tmp/drive-clone-e2e-temp" \
   -e DATABASE_URL=postgresql://drive:e2e-password@${postgres}:5432/drive \
   -e SESSION_SECRET=drive-e2e-session-secret-at-least-32-characters \
   -e CORS_ORIGIN=http://web:8080 \
   -e AWS_ENDPOINT=http://localstack:4566 -e AWS_REGION=us-east-1 \
   -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test \
   -e TEMP_DIR=/tmp/drive-clone-e2e-temp \
-  node:24.21.0-bookworm-slim sh -c 'mkdir -p "$TEMP_DIR" && npm run dev -w @drive-clone/server' > /dev/null
+  node:24.21.0-bookworm-slim npm run dev -w @drive-clone/server > /dev/null
 
 # Start worker
 docker run -d --name "$worker" --network "$network" -v "$PWD:/app" -w /app \
+  -v "${temp_vol}:/tmp/drive-clone-e2e-temp" \
   -e DATABASE_URL=postgresql://drive:e2e-password@${postgres}:5432/drive \
   -e AWS_ENDPOINT=http://localstack:4566 -e AWS_REGION=us-east-1 \
   -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test \
   -e TEMP_DIR=/tmp/drive-clone-e2e-temp \
-  node:24.21.0-bookworm-slim sh -c 'mkdir -p "$TEMP_DIR" && npm run worker -w @drive-clone/server' > /dev/null
+  node:24.21.0-bookworm-slim npm run worker -w @drive-clone/server > /dev/null
 
 # Wait for API health
 ready=0
@@ -85,8 +88,8 @@ docker run -d --name "$web" --network "$network" --network-alias web \
   nginx:1.29.4-alpine@sha256:4870c12cd2ca986de501a804b4f506ad3875a0b1874940ba0a2c7f763f1855b2 > /dev/null
 
 # Prepare reports directory
+rm -rf reports/e2e 2>/dev/null || docker run --rm -v "$PWD:/app" -w /app node:24.21.0-bookworm-slim rm -rf /app/reports/e2e
 mkdir -p reports/e2e
-rm -rf reports/e2e
 
 # Run Playwright tests
 docker run --rm --network "$network" -v "$PWD:/app" -w /app \
@@ -97,6 +100,7 @@ docker run --rm --network "$network" -v "$PWD:/app" -w /app \
     result=$?
     node scripts/summarize-e2e.mjs
     summary=$?
+    chmod -R 777 reports/e2e 2>/dev/null || true
     [ "$result" -eq 0 ] || exit $result
     exit $summary
   '

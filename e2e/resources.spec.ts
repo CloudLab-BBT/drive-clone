@@ -25,7 +25,9 @@ test('crea y navega carpetas, protege raíz, renombra y completa borrado recursi
     const dialog = owner.page.getByRole('dialog');
     await dialog.getByLabel('Nuevo nombre').fill(`${child}-renombrada`);
     await dialog.getByRole('button', { name: 'Guardar nombre' }).click();
-    await expect(owner.page.getByText(`${child}-renombrada`)).toBeVisible();
+    await expect(
+      owner.page.getByRole('button', { name: `Abrir ${child}-renombrada` }),
+    ).toBeVisible();
     await owner.page.getByRole('button', { name: 'Volver' }).click();
     await owner.page.getByRole('button', { name: `Eliminar ${parent}` }).click();
     await expect(owner.page.getByText(/Se eliminará la carpeta y todo su contenido/)).toBeVisible();

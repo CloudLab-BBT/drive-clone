@@ -65,12 +65,11 @@ export function useBatchPolling(
           );
         }
       } catch (cause) {
-        if (!stopped)
+        const error = cause as Error & { status?: number };
+        if (!stopped && error.status !== 429)
           setFiles((current) =>
             current.map((file) =>
-              file.uploadId && active.has(file.status)
-                ? { ...file, error: (cause as Error).message }
-                : file,
+              file.uploadId && active.has(file.status) ? { ...file, error: error.message } : file,
             ),
           );
       } finally {

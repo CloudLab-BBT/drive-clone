@@ -18,6 +18,9 @@ export default defineConfig({
   outputDir: 'reports/e2e/artifacts',
   use: {
     baseURL: process.env.BASE_URL ?? 'http://127.0.0.1:8080',
+    launchOptions: {
+      args: ['--unsafely-treat-insecure-origin-as-secure=http://web:8080'],
+    },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },

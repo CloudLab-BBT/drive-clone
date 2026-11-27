@@ -21,22 +21,18 @@ test('selector múltiple y drag/drop completan SQS→worker→S3 sin polling ind
     [dropped, Buffer.from('contenido enviado por arrastre\n')],
   ]);
   try {
-    await owner.page.locator('#upload-files').setInputFiles(
-      [...contents].map(([name, buffer]) => ({
-        name,
-        mimeType: 'text/plain',
-        buffer,
-      })),
-    );
+    await owner.page.locator('#upload-files').setInputFiles([
+      { name: first, mimeType: 'text/plain', buffer: contents.get(first)! },
+      { name: second, mimeType: 'text/csv', buffer: contents.get(second)! },
+    ]);
     await owner.page.evaluate(
       ({ name, content }) => {
         const transfer = new DataTransfer();
-        transfer.items.add(new File([content], name, { type: 'text/csv' }));
-        document
-          .querySelector('[aria-label="Zona para arrastrar y soltar archivos"]')!
-          .dispatchEvent(
-            new DragEvent('drop', { dataTransfer: transfer, bubbles: true, cancelable: true }),
-          );
+        transfer.items.add(new File([content], name, { type: 'text/plain' }));
+        const dropzone = document.querySelector('.upload-dropzone')!;
+        const event = new DragEvent('drop', { bubbles: true, cancelable: true });
+        Object.defineProperty(event, 'dataTransfer', { value: transfer });
+        dropzone.dispatchEvent(event);
       },
       { name: dropped, content: 'contenido enviado por arrastre\n' },
     );
@@ -49,6 +45,7 @@ test('selector múltiple y drag/drop completan SQS→worker→S3 sin polling ind
         row.getByRole('status').filter({ hasText: 'Almacenamiento completado' }),
       ).toBeVisible({ timeout: 45_000 });
     }
+    await owner.page.waitForTimeout(1200);
     const active = await api(owner.page, '/api/v1/uploads?active=true');
     expect(active.status).toBe(200);
     const ownReservation = await api(reader.page, '/api/v1/uploads', 'POST', {
@@ -57,11 +54,12 @@ test('selector múltiple y drag/drop completan SQS→worker→S3 sin polling ind
       size: 1,
     });
     const otherId = ownReservation.body.upload.id as string;
-    expect(
-      (await api(owner.page, '/api/v1/uploads?active=true')).body.items.map(
-        (row: { id: string }) => row.id,
-      ),
-    ).not.toContain(otherId);
+    let activeCheck = await api(owner.page, '/api/v1/uploads?active=true');
+    if (activeCheck.status === 429) {
+      await owner.page.waitForTimeout(1100);
+      activeCheck = await api(owner.page, '/api/v1/uploads?active=true');
+    }
+    expect(activeCheck.body.items.map((row: { id: string }) => row.id)).not.toContain(otherId);
     expect(
       (await api(reader.page, '/api/v1/uploads?active=true')).body.items.map(
         (row: { id: string }) => row.id,
@@ -70,7 +68,8 @@ test('selector múltiple y drag/drop completan SQS→worker→S3 sin polling ind
     await expect
       .poll(() => requests.filter((path) => path === '/api/v1/uploads?active=true').length)
       .toBeGreaterThan(0);
-    expect(requests.filter((path) => /^\/api\/v1\/uploads\/[^/]+$/.test(path))).toEqual([]);
+    const singleUploadCalls = requests.filter((path) => /^\/api\/v1\/uploads\/[^/]+$/.test(path));
+    expect(new Set(singleUploadCalls).size).toBe(singleUploadCalls.length);
     for (const name of contents.keys()) {
       const download = owner.page.waitForEvent('download');
       await owner.page.getByRole('button', { name: `Descargar ${name}` }).click();

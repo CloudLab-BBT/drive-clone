@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 set -eu
 
 # Helper script to provision the isolated Docker stack for E2E tests.
@@ -11,8 +11,9 @@ localstack="${prefix}-localstack"
 api="${prefix}-api"
 worker="${prefix}-worker"
 web="${prefix}-web"
+temp_vol="${prefix}-temp"
 
-export prefix network postgres localstack api worker web
+export prefix network postgres localstack api worker web temp_vol
 
 # Create network
 docker network create "$network" > /dev/null
@@ -51,8 +52,6 @@ cleanup_stack() {
     docker rm -f "$c" > /dev/null 2>&1 || status=1
   done
   docker network rm "$network" > /dev/null 2>&1 || status=1
+  docker volume rm "$temp_vol" > /dev/null 2>&1 || true
   exit "$status"
 }
-
-# Export cleanup function name so caller can trap it
-export -f cleanup_stack

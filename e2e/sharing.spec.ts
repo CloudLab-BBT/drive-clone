@@ -26,7 +26,7 @@ test('comparte sin exponer ancestros, limita READ y conserva permiso heredado al
     await parentDialog.getByLabel('Nombre de usuario').fill(reader.username);
     await parentDialog.getByLabel('Permiso').selectOption('READ');
     await parentDialog.getByRole('button', { name: 'Guardar permiso' }).click();
-    await owner.page.getByRole('button', { name: 'Cerrar' }).click();
+    await parentDialog.getByRole('button', { name: 'Cerrar', exact: true }).click();
     await owner.page.getByRole('button', { name: `Abrir ${sharedName}` }).click();
     await owner.page.getByRole('button', { name: `Compartir ${childName}` }).click();
     const childDialog = owner.page.getByRole('dialog');
@@ -60,12 +60,14 @@ test('comparte sin exponer ancestros, limita READ y conserva permiso heredado al
       size: 1,
     });
     expect(deniedUpload.status).toBe(403);
-    await reader.page.getByRole('button', { name: `Abrir ${sharedName}` }).click();
-    await expect(reader.page.getByText(privateName)).toHaveCount(0);
-    await expect(reader.page.getByRole('button', { name: `Renombrar ${childName}` })).toHaveCount(
+    await reader.page.reload();
+    const sharedSection = reader.page.getByRole('region', { name: 'Compartidos conmigo' });
+    await sharedSection.getByRole('button', { name: `Abrir ${sharedName}` }).click();
+    await expect(sharedSection.getByText(privateName)).toHaveCount(0);
+    await expect(sharedSection.getByRole('button', { name: `Renombrar ${childName}` })).toHaveCount(
       0,
     );
-    await expect(reader.page.getByRole('button', { name: 'Crear carpeta' })).toHaveCount(0);
+    await expect(sharedSection.getByRole('button', { name: 'Crear carpeta' })).toHaveCount(0);
   } finally {
     await closeAccounts(owner, reader, outsider);
   }
