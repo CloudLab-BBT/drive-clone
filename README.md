@@ -36,3 +36,4 @@ unitarias con cobertura (`npm run test:coverage`) no requieren base de datos.
 - [Primera carga por cola O06](docs/carga-o06.md).
 - [Resultados de validación O06](docs/validacion-o06.md).
 - [Carga múltiple, formatos y drag & drop O09](docs/carga-multiple-formatos.md).
+- [Pruebas E2E y regresiones O14](docs/pruebas-e2e-regresiones.md).

@@ -20,6 +20,8 @@
     "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
     "test:coverage": "vitest run --exclude '**/*.integration.test.ts' --coverage",
     "test:integration": "vitest run --config vitest.integration.config.ts --reporter=default --reporter=junit --outputFile.junit=reports/integration/junit.xml",
+    "test:e2e": "./scripts/test-e2e-isolated.sh",
+    "test:e2e:repeat": "./scripts/test-e2e-isolated.sh && ./scripts/test-e2e-isolated.sh",
     "check:file-lines": "sh scripts/check-file-lines.sh",
     "audit:dependencies": "mkdir -p reports && npm audit --audit-level=critical --json > reports/dependency-audit.json",
     "build": "npm run generate -w @drive-clone/server && npm run build -w @drive-clone/web",
@@ -30,6 +32,7 @@
   "devDependencies": {
     "@apidevtools/swagger-parser": "13.1.0",
     "@eslint/js": "10.0.1",
+    "@playwright/test": "1.65.1",
     "@types/node": "24.19.2",
     "@vitest/coverage-v8": "5.1.0",
     "ajv": "8.20.0",
